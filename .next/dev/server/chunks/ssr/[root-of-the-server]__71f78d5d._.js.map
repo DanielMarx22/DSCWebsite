@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 48, "column": 0}, "map": {"version":3,"sources":["file:///C:/Users/djmar/OneDrive/Desktop/dscwebsite/lib/stripe.ts"],"sourcesContent":["import Stripe from \"stripe\";\r\n\r\nexport const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);"],"names":[],"mappings":";;;;AAAA;;AAEO,MAAM,SAAS,IAAI,iKAAM,CAAC,QAAQ,GAAG,CAAC,iBAAiB","debugId":null}},
+    {"offset": {"line": 59, "column": 0}, "map": {"version":3,"sources":["file:///C:/Users/djmar/OneDrive/Desktop/dscwebsite/app/page.tsx"],"sourcesContent":["import Image from \"next/image\";\nimport styles from \"./page.module.css\";\nimport { stripe } from \"@/lib/stripe\";\n\n\nexport default async function Home() {\n  const products = await stripe.products.list({\n    expand: [\"data.default_price\"],\n    limit: 5,\n  });\n\n  return (<div><section> <div> <div></div></div></section></div>);\n}\n"],"names":[],"mappings":";;;;;AAEA;;;AAGe,eAAe;IAC5B,MAAM,WAAW,MAAM,uHAAM,CAAC,QAAQ,CAAC,IAAI,CAAC;QAC1C,QAAQ;YAAC;SAAqB;QAC9B,OAAO;IACT;IAEA,qBAAQ,8OAAC;kBAAI,cAAA,8OAAC;;gBAAQ;8BAAC,8OAAC;;wBAAI;sCAAC,8OAAC;;;;;;;;;;;;;;;;;;;;;;AAChC","debugId":null}}]
+}
