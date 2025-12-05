@@ -1,57 +1,71 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
 
 export interface CartItem {
   id: string;
   name: string;
   price: number;
-  imageUrl: string | null;
+  imageUrl?: string | null; // Allow null to match Sanity
   quantity: number;
+  maxQuantity: number; // 👈 NEW FIELD: The Ceiling
 }
 
-interface CartStore {
+interface CartState {
   items: CartItem[];
   addItem: (item: CartItem) => void;
   removeItem: (id: string) => void;
+  updateQuantity: (id: string, action: "increase" | "decrease") => void;
   clearCart: () => void;
 }
 
-export const useCartStore = create<CartStore>()(
+export const useCartStore = create<CartState>()(
   persist(
     (set) => ({
       items: [],
       addItem: (item) =>
         set((state) => {
-          const existing = state.items.find((i) => i.id === item.id);
-
-          if (existing) {
+          const existingItem = state.items.find((i) => i.id === item.id);
+          if (existingItem) {
+            // Check if adding 1 would exceed limit
+            if (existingItem.quantity >= existingItem.maxQuantity) {
+              return { items: [...state.items] }; // Do nothing
+            }
             return {
               items: state.items.map((i) =>
-                i.id === item.id
-                  ? { ...i, quantity: i.quantity + item.quantity }
-                  : i
+                i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i
               ),
             };
           }
-
-          return { items: [...state.items, item] };
+          return { items: [...state.items, { ...item, quantity: 1 }] };
         }),
-
       removeItem: (id) =>
-        set((state) => {
-          return {
-            items: state.items
-              .map((item) =>
-                item.id === id ? { ...item, quantity: item.quantity - 1 } : item
-              )
-              .filter((item) => item.quantity > 0),
-          };
-        }),
-      clearCart: () =>
-        set(() => {
-          return { items: [] };
-        }),
+        set((state) => ({
+          items: state.items.filter((i) => i.id !== id),
+        })),
+      updateQuantity: (id, action) =>
+        set((state) => ({
+          items: state.items.map((item) => {
+            if (item.id === id) {
+              if (action === "increase") {
+                // 👈 ENFORCE LIMIT HERE
+                return item.quantity < item.maxQuantity
+                  ? { ...item, quantity: item.quantity + 1 }
+                  : item;
+              }
+              if (action === "decrease") {
+                return item.quantity > 1
+                  ? { ...item, quantity: item.quantity - 1 }
+                  : item;
+              }
+            }
+            return item;
+          }),
+        })),
+      clearCart: () => set({ items: [] }),
     }),
-    { name: "cart" }
+    {
+      name: "cart-storage",
+      storage: createJSONStorage(() => localStorage),
+    }
   )
 );

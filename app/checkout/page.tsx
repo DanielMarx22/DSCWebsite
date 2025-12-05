@@ -6,7 +6,9 @@ import { useCartStore } from "@/store/cart-store";
 import { checkoutAction } from "./checkout-action";
 
 export default function CheckoutPage() {
-  const { items, removeItem, addItem } = useCartStore();
+  // 1. Get updateQuantity from the store
+  const { items, removeItem, updateQuantity } = useCartStore();
+
   const total = items.reduce(
     (acc, item) => acc + item.price * item.quantity,
     0
@@ -37,23 +39,52 @@ export default function CheckoutPage() {
                     ${((item.price * item.quantity) / 100).toFixed(2)}
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
+
+                {/* Control Row */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {/* MINUS BUTTON */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      // Changed from removeItem to updateQuantity('decrease')
+                      onClick={() => updateQuantity(item.id, "decrease")}
+                    >
+                      –
+                    </Button>
+
+                    <span className="text-lg font-semibold">
+                      {item.quantity}
+                    </span>
+
+                    {/* PLUS BUTTON */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      // 1. Use updateQuantity
+                      onClick={() => updateQuantity(item.id, "increase")}
+                      // 2. Disable if we hit the limit
+                      disabled={item.quantity >= item.maxQuantity}
+                      // 3. Add visual styling for disabled state
+                      className={
+                        item.quantity >= item.maxQuantity
+                          ? "opacity-50 cursor-not-allowed"
+                          : ""
+                      }
+                    >
+                      +
+                    </Button>
+                  </div>
+
+                  {/* REMOVE BUTTON (New, to allow full deletion) */}
+                  <button
                     onClick={() => removeItem(item.id)}
+                    className="text-xs text-red-500 hover:text-red-400 underline"
                   >
-                    –
-                  </Button>
-                  <span className="text-lg font-semibold">{item.quantity}</span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => addItem({ ...item, quantity: 1 })}
-                  >
-                    +
-                  </Button>
+                    Remove
+                  </button>
                 </div>
+                {/* End Control Row */}
               </li>
             ))}
           </ul>
