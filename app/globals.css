@@ -33,22 +33,6 @@
   --radius: 0.5rem;
 }
 
-/* Base global styles using the new @layer syntax */
-@layer base {
-  /* Apply a default border style using our custom border color */
-  /* * {
-    @apply border border-[rgb(var(--color-border))];
-  } */
-
-  .border-border {
-    border-width: 2px;
-    border-color: var(--color-border);
-  }
-  body {
-    @apply bg-[rgb(var(--color-background))] text-[rgb(var(--color-foreground))];
-  }
-}
-
 :root {
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -163,7 +147,7 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border; /* This sets Color only, NOT width */
   }
   body {
     @apply bg-background text-foreground;

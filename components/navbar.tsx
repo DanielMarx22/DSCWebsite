@@ -38,7 +38,7 @@ export const Navbar = () => {
 
   return (
     // Top-level nav is sticky and black
-    <nav className="sticky top-0 z-50 bg-black shadow text-white">
+    <nav className="sticky top-0 z-100 bg-black shadow text-white">
       {/* 🌟 1. TOP BAR (Mobile/Desktop Header) 🌟 */}
       <div className="container mx-auto flex items-center justify-between py-4 px-4 relative">
         {/* === LEFT SIDE: HAMBURGER (Mobile) / Placeholder (Desktop) === */}

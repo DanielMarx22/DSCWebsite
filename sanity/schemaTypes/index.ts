@@ -1,6 +1,7 @@
-import { type SchemaTypeDefinition } from "sanity";
-import { product } from "./product"; // 1. Import your new file
+import { product } from "./product";
+import { settings } from "./settings"; // 👈 Import
+import { policy } from "./policy"; // 👈 Import
 
-export const schema: { types: SchemaTypeDefinition[] } = {
-  types: [product], // 2. Add it to this list
+export const schema = {
+  types: [product, settings, policy], // 👈 Add to list
 };
