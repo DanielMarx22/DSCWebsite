@@ -1,50 +1,55 @@
 import Link from "next/link";
-import Stripe from "stripe";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import Image from "next/image";
-import { Button } from "./ui/button";
 
 interface Props {
-  product: Stripe.Product;
+  product: any; // Using 'any' since we have hybrid Sanity/Stripe data now
 }
 
 export const ProductCard = ({ product }: Props) => {
-  const price = product.default_price as Stripe.Price;
-
   return (
     <Link
-      href={`/products/${product.metadata.category || "corals"}/${product.id}`}
-      className="block h-full"
+      href={`/products/${product.metadata?.category || 'supplies'}/${product.id}`}
+      className="group block overflow-hidden rounded-lg border border-gray-800 bg-gray-900"
     >
-      <Card className="group hover:shadow-2xl transition duration-300 py-0 h-full flex flex-col border-gray-300 gap-0">
-        {product.images && product.images[0] && (
-          <div className="relative h-60 w-full">
-            <Image
-              src={product.images[0]}
-              alt={product.name}
-              layout="fill"
-              objectFit="cover"
-              className="group-hover:opacity-90 transition-opacity duration-300 rounded-t-lg"
-            />
+      {/* IMAGE CONTAINER */}
+      {/* aspect-square: Forces width and height to be equal */}
+      <div className="relative aspect-square w-full overflow-hidden bg-gray-800">
+        {product.images?.[0] ? (
+          <Image
+            src={product.images[0]}
+            alt={product.name}
+            fill
+            sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
+            // object-cover: Crops the image to fill the square without squishing/stretching
+            className="object-cover transition-transform duration-300 group-hover:scale-105"
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center text-gray-500">
+            No Image
           </div>
         )}
-        <CardHeader className="p-4">
-          <CardTitle className="text-xl font-bold text-gray-800">
-            {product.name}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-4 flex-grow flex flex-col justify-between">
-          {product.description && (
-            <p className="text-gray-600 text-sm mb-2">{product.description}</p>
-          )}
-          {price && price.unit_amount && (
-            <p className="text-lg font-semibold text-gray-900">
-              ${(price.unit_amount / 100).toFixed(2)}
-            </p>
-          )}
-          <Button className="mt-4 bg-black text-white">View Details</Button>
-        </CardContent>
-      </Card>
+
+        {/* INVENTORY BADGE (Optional but nice) */}
+        {product.inventory === 0 && (
+           <div className="absolute top-2 right-2 bg-red-600 text-white text-xs font-bold px-2 py-1 rounded">
+             SOLD OUT
+           </div>
+        )}
+      </div>
+
+      {/* TEXT CONTENT */}
+      <div className="p-4">
+        <h3 className="text-lg font-bold text-white truncate">{product.name}</h3>
+        
+        {/* Helper to show price if it exists */}
+        {product.default_price?.unit_amount ? (
+           <p className="mt-1 text-sm text-gray-400">
+             ${(product.default_price.unit_amount / 100).toFixed(2)}
+           </p>
+        ) : (
+           <p className="mt-1 text-sm text-blue-400 font-semibold">View Details</p>
+        )}
+      </div>
     </Link>
   );
 };
