@@ -1,4 +1,4 @@
-import { product } from "./product";
+import product from "./product";
 import { settings } from "./settings"; // 👈 Import
 import { policy } from "./policy"; // 👈 Import
 
