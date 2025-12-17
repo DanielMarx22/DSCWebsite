@@ -41,7 +41,6 @@ export default defineType({
             { title: 'Inverts', value: 'inverts' },
             { title: 'Supplies', value: 'supplies' },
         ],
-        layout: 'radio', 
       },
       validation: (Rule) => Rule.required(),
     }),
