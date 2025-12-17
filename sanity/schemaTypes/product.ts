@@ -1,4 +1,4 @@
-import { defineField, defineType } from "sanity"
+import { defineField, defineType } from 'sanity'
 
 export default defineType({
   name: 'product',
@@ -6,8 +6,8 @@ export default defineType({
   type: 'document',
   fields: [
     defineField({
-      name: 'name',
-      title: 'Name',
+      name: 'title',
+      title: 'Product Name',
       type: 'string',
       validation: (Rule) => Rule.required(),
     }),
@@ -16,72 +16,94 @@ export default defineType({
       title: 'Slug',
       type: 'slug',
       options: {
-        source: 'name',
+        source: 'title',
         maxLength: 96,
       },
       validation: (Rule) => Rule.required(),
     }),
     defineField({
+      name: 'price',
+      title: 'Price (USD)',
+      type: 'number',
+    }),
+    defineField({
+      name: 'inventory',
+      title: 'Inventory Count',
+      type: 'number',
+      initialValue: 0,
+    }),
+    // 👇 THIS IS THE ARRAY WE FIXED EARLIER
+    defineField({
       name: 'images',
-      title: 'Images',
+      title: 'Product Images',
       type: 'array',
       of: [{ type: 'image', options: { hotspot: true } }],
     }),
-    
-    // --- NEW FILTERING LOGIC START ---
     defineField({
       name: 'category',
-      title: 'Main Category',
+      title: 'Category',
       type: 'string',
-      description: 'The high-level bucket this item belongs to.',
       options: {
         list: [
-            { title: 'Fish', value: 'fish' },
-            { title: 'Corals', value: 'corals' },
-            { title: 'Inverts', value: 'inverts' },
-            { title: 'Supplies', value: 'supplies' },
+          { title: 'Fish', value: 'fish' },
+          { title: 'Corals', value: 'corals' },
+          { title: 'Inverts', value: 'inverts' },
+          { title: 'Supplies', value: 'supplies' },
         ],
       },
-      validation: (Rule) => Rule.required(),
     }),
     defineField({
       name: 'tags',
-      title: 'Tags / Keywords',
-      description: 'Type a tag and hit Enter (e.g. "Tang", "LPS", "Reef Safe", "Algae Eater"). These will become filters on the website.',
+      title: 'Tags',
       type: 'array',
       of: [{ type: 'string' }],
       options: {
         layout: 'tags',
       },
     }),
-    // --- NEW FILTERING LOGIC END ---
-
+    defineField({
+      name: 'short_description',
+      title: 'Short Description',
+      type: 'text',
+      rows: 2,
+    }),
     defineField({
       name: 'description',
-      title: 'Description',
-      type: 'blockContent', // Or 'text' if you aren't using rich text
+      title: 'Full Description', 
+      type: 'array', 
+      of: [{ type: 'block' }] 
     }),
-    
-    // --- STRIPE / SQUARE INTEGRATION FIELDS ---
-    // We keep these flexible so they work for both Stripe (now) and Square (later)
     defineField({
-      name: 'sku',
-      title: 'SKU / Stripe ID',
-      description: 'The Product ID from Stripe or Square',
+      name: 'stripeId',
+      title: 'Stripe ID (Legacy)', 
       type: 'string',
+      hidden: true, 
     }),
+
+    // 2. Hide the old Single Image (Junk data, but easier to hide than delete)
     defineField({
-        name: 'price',
-        title: 'Price (Fallback)',
-        description: 'Used for sorting. Real price comes from Stripe/Square.',
-        type: 'number',
-    }),
-    defineField({
-        name: 'inventory',
-        title: 'Inventory Count (Sanity Fallback)',
-        description: 'For manual control if needed. Real stock checks usually happen via API.',
-        type: 'number',
-        initialValue: 0
+      name: 'image', 
+      title: 'Legacy Image',
+      type: 'image',
+      hidden: true, 
     }),
   ],
+
+  preview: {
+    select: {
+      title: 'title',
+      // 👇 CHANGE 1: Grab the entire array, not just the first item
+      images: 'images', 
+      price: 'price',
+    },
+    prepare(selection) {
+      const { title, images, price } = selection;
+      return {
+        title,
+        subtitle: price ? `$${price}` : 'Price not set',
+        // 👇 CHANGE 2: Manually check if the list exists and pick the first one
+        media: images && images[0] ? images[0] : null,
+      };
+    },
+  },
 })

@@ -1,7 +1,10 @@
-import product from "./product";
-import { settings } from "./settings"; // 👈 Import
-import { policy } from "./policy"; // 👈 Import
+import { type SchemaTypeDefinition } from "sanity";
 
-export const schema = {
-  types: [product, settings, policy], // 👈 Add to list
+// All imports use default (no curly braces)
+import product from "./product";
+import settings from "./settings";
+import policy from "./policy";
+
+export const schema: { types: SchemaTypeDefinition[] } = {
+  types: [product, settings, policy],
 };

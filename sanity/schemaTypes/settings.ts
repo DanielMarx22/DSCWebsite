@@ -1,6 +1,6 @@
 import { defineField, defineType } from "sanity";
 
-export const settings = defineType({
+export default defineType({
   name: "settings",
   title: "Store Settings",
   type: "document",

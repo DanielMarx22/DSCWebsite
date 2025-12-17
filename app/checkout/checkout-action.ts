@@ -7,11 +7,17 @@ import { redirect } from "next/navigation";
 export const checkoutAction = async (formData: FormData): Promise<void> => {
   const itemsJson = formData.get("items") as string;
   const items = JSON.parse(itemsJson);
+
   const line_items = items.map((item: CartItem) => ({
     price_data: {
-      currency: "cad",
-      product_data: { name: item.name },
-      unit_amount: item.price,
+      currency: "usd", // Changed to USD since your site displays USD
+      product_data: { 
+        name: item.name,
+        images: item.imageUrl ? [item.imageUrl] : [], // Pass image to Stripe Checkout!
+      },
+      // ⚠️ IMPORTANT: Stripe expects cents. Sanity has dollars ($80).
+      // We multiply by 100 here to get cents (8000).
+      unit_amount: Math.round(item.price * 100), 
     },
     quantity: item.quantity,
   }));

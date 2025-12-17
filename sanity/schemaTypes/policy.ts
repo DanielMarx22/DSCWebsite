@@ -1,6 +1,6 @@
 import { defineField, defineType } from "sanity";
 
-export const policy = defineType({
+export default defineType({
   name: "policy",
   title: "Policy Pages",
   type: "document",

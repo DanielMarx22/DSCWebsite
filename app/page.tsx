@@ -1,15 +1,9 @@
 import Image from "next/image";
 import Link from "next/link";
 import { client } from "@/sanity/lib/client";
-import { stripe } from "@/lib/stripe"; // We need Stripe for sorting prices!
 import { Button } from "@/components/ui/button";
 import { Carousel } from "@/components/carousel";
 import { BrandCarousel } from "@/components/brand-carousel";
-import {
-  TruckIcon,
-  ShieldCheckIcon,
-  SparklesIcon,
-} from "@heroicons/react/24/outline";
 
 // Helper to get the "Daily Rotation Index" (0 to 4)
 function getDailyIndex(max: number) {
@@ -17,63 +11,75 @@ function getDailyIndex(max: number) {
   return dayOfYear % max;
 }
 
+// Define the shape of our Sanity Product
+interface Product {
+  _id: string;
+  name: string;
+  slug: string;
+  price: number;
+  imageUrl: string; 
+  inventory: number;
+  short_description?: string;
+  category: string;
+  tags?: string[];
+}
+
 export default async function Home() {
-  // 1. Fetch ALL products from Sanity (we need to filter them manually)
-  const sanityProducts = await client.fetch(`*[_type == "product"] {
-    _id,
-    "id": stripeId, 
-    "name": title,
-    "images": [image.asset->url],
-    "inventory": inventory,
-    "description": short_description,
-    "tags": tags,
-    "metadata": { "category": category }
-  }`);
+  // 1. Fetch ALL products from Sanity
+  const products = await client.fetch<Product[]>(`
+    *[_type == "product"] {
+      _id,
+      "name": title,
+      "slug": slug.current,
+      "imageUrl": images[0].asset->url,
+      price,
+      inventory,
+      short_description, 
+      category,
+      tags
+    }
+  `);
 
-  // 2. Fetch Prices from Stripe for these products
-  // (In a real large app, you'd store price in Sanity to skip this step, but this works for now)
-  const productsWithPrice = await Promise.all(
-    sanityProducts.map(async (p: any) => {
-      if (!p.id) return { ...p, price: 0 };
-      try {
-        const stripeProd = await stripe.products.retrieve(p.id, {
-          expand: ["default_price"],
-        });
-        const priceObj = stripeProd.default_price as any;
-        return { ...p, price: priceObj?.unit_amount || 0 };
-      } catch (e) {
-        return { ...p, price: 0 };
-      }
-    })
-  );
+  // 2. MASTER FILTER: Create a list of ONLY Available products
+  // This ensures Out of Stock items never appear on the Home Page
+  const availableProducts = products.filter((p) => (p.inventory || 0) > 0);
 
-  // 3. Logic: Find Top 5 Most Expensive (Available) Items
-  const expensiveProducts = productsWithPrice
-    .filter((p: any) => p.inventory > 0) // Must be in stock
-    .sort((a: any, b: any) => b.price - a.price) // Sort High to Low
+  // 3. Logic: Find Top 5 Most Expensive (Available) Items for the Featured Spot
+  const expensiveProducts = availableProducts
+    .sort((a, b) => (b.price || 0) - (a.price || 0)) // Sort High to Low
     .slice(0, 5); // Take Top 5
 
-  // 4. Logic: Pick Today's Winner
-  const dailyIndex = getDailyIndex(expensiveProducts.length);
+  // 4. Logic: Pick Today's Featured Winner
+  // This rotates through the top 5 expensive items
+  const dailyIndex = expensiveProducts.length > 0 ? getDailyIndex(expensiveProducts.length) : 0;
   const featuredProduct = expensiveProducts[dailyIndex];
 
-  // 5. Logic: Best Sellers (Filter by "Best Seller" tag OR just random for now)
-  const bestSellers = productsWithPrice.filter(
-    (p: any) => p.tags && p.tags.includes("Best Seller")
+  // 5. Logic: Best Sellers (Must be Available)
+  const bestSellers = availableProducts.filter(
+    (p) => p.tags && p.tags.includes("Best Seller")
   );
-  // Fallback: If no tags, show 5 random items
+  
+  // Fallback: Use other available products if no "Best Seller" tags are found
   const displayBestSellers =
-    bestSellers.length > 0 ? bestSellers : productsWithPrice.slice(0, 8);
+    bestSellers.length > 0 ? bestSellers : availableProducts.slice(0, 8);
+
+  // 6. Logic: New Arrivals (Must be Available)
+  // We use the available list so no out-of-stock items show in the bottom carousel
+  const newArrivals = availableProducts.slice(0, 8); 
 
   return (
     <div className="bg-black min-h-screen text-white">
-      {/* HERO SECTION (Same as before) */}
+      {/* HERO SECTION */}
       <section className="relative bg-gradient-to-b from-gray-900 to-black py-20 sm:py-32">
-        {/* ... (Keep your existing Hero code here) ... */}
         <div className="container mx-auto px-4 flex flex-col items-center text-center">
           <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight text-white mb-6">
             Down South <span className="text-blue-500">Corals</span>
           </h1>
+          <p className="text-gray-400 text-lg md:text-xl max-w-2xl mb-8">
+            Premium aquaculture, sustainably grown corals, and healthy marine life delivered directly to your tank.
+          </p>
+          
+          {/* SHOP ALL BUTTON */}
           <Button
             asChild
             size="lg"
@@ -84,23 +90,27 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* BRAND CAROUSEL (New) */}
+      {/* BRAND CAROUSEL */}
       <BrandCarousel />
 
-      {/* FEATURED PRODUCT (New) */}
+      {/* FEATURED PRODUCT */}
       {featuredProduct && (
         <section className="py-20 bg-gray-900">
           <div className="container mx-auto px-4">
             <div className="flex flex-col md:flex-row items-center gap-12 bg-black/50 border border-gray-800 rounded-2xl p-8 md:p-12">
               {/* Image */}
-              <div className="w-full md:w-1/2 relative h-[400px] rounded-xl overflow-hidden">
-                <Image
-                  src={featuredProduct.images[0]}
-                  alt={featuredProduct.name}
-                  fill
-                  className="object-cover hover:scale-105 transition-transform duration-500"
-                />
-                <div className="absolute top-4 left-4 bg-yellow-500 text-black font-bold px-4 py-1 rounded-full uppercase text-sm">
+              <div className="w-full md:w-1/2 relative h-[400px] rounded-xl overflow-hidden bg-gray-800">
+                {featuredProduct.imageUrl ? (
+                  <Image
+                    src={featuredProduct.imageUrl}
+                    alt={featuredProduct.name}
+                    fill
+                    className="object-cover hover:scale-105 transition-transform duration-500"
+                  />
+                ) : (
+                   <div className="w-full h-full flex items-center justify-center text-gray-500">No Image</div>
+                )}
+                <div className="absolute top-4 left-4 bg-yellow-500 text-black font-bold px-4 py-1 rounded-full uppercase text-sm z-10">
                   Daily Feature
                 </div>
               </div>
@@ -108,15 +118,15 @@ export default async function Home() {
               <div className="w-full md:w-1/2 space-y-6">
                 <h2 className="text-4xl font-bold">{featuredProduct.name}</h2>
                 <p className="text-gray-400 text-lg">
-                  {featuredProduct.description}
+                  {featuredProduct.short_description || "A premium selection from our exclusive collection."}
                 </p>
                 <p className="text-3xl font-bold text-blue-400">
-                  ${(featuredProduct.price / 100).toFixed(2)}
+                  ${featuredProduct.price}
                 </p>
                 <div className="flex gap-4">
-                  <Button asChild size="lg" className="rounded-full px-8">
+                  <Button asChild size="lg" className="rounded-full px-8 bg-white text-black hover:bg-gray-200">
                     <Link
-                      href={`/products/${featuredProduct.metadata.category}/${featuredProduct.id}`}
+                      href={`/products/${featuredProduct.category}/${featuredProduct.slug}`}
                     >
                       Buy Now
                     </Link>
@@ -128,35 +138,50 @@ export default async function Home() {
         </section>
       )}
 
-      {/* CATEGORIES (Keep existing) */}
+      {/* CATEGORIES GRID */}
+      <section className="py-20 container mx-auto px-4">
+         <h2 className="text-3xl font-bold mb-12 text-center">Shop by Category</h2>
+         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {['Fish', 'Corals', 'Inverts', 'Supplies'].map((cat) => (
+                <Link 
+                  key={cat} 
+                  href={`/products/${cat.toLowerCase()}`}
+                  className="group relative h-40 bg-gray-800 rounded-xl overflow-hidden flex items-center justify-center border border-gray-700 hover:border-blue-500 transition-all"
+                >
+                    <span className="z-10 text-xl font-bold group-hover:scale-110 transition-transform">{cat}</span>
+                    <div className="absolute inset-0 bg-black/50 group-hover:bg-black/40 transition-colors" />
+                </Link>
+            ))}
+         </div>
+      </section>
 
-      {/* BEST SELLERS (New Horizontal Scroll) */}
+      {/* BEST SELLERS (Horizontal Scroll) */}
       <section className="py-20 container mx-auto px-4">
         <h2 className="text-3xl font-bold mb-8">Best Sellers</h2>
-        {/* Horizontal Scroll Container */}
         <div className="flex overflow-x-auto gap-6 pb-8 snap-x snap-mandatory scrollbar-hide">
-          {displayBestSellers.map((product: any) => (
+          {displayBestSellers.map((product) => (
             <div
-              key={product.id}
+              key={product._id}
               className="min-w-[280px] md:min-w-[320px] snap-start"
             >
-              {/* Reuse your existing Product Card Logic manually here for custom sizing */}
               <Link
-                href={`/products/${product.metadata.category}/${product.id}`}
-                className="block bg-gray-900 border border-gray-800 rounded-lg overflow-hidden hover:border-blue-500 transition-colors"
+                href={`/products/${product.category}/${product.slug}`}
+                className="block bg-gray-900 border border-gray-800 rounded-lg overflow-hidden hover:border-blue-500 transition-colors group"
               >
-                <div className="relative h-64 w-full">
-                  <Image
-                    src={product.images[0]}
-                    alt={product.name}
-                    fill
-                    className="object-cover"
-                  />
+                <div className="relative h-64 w-full bg-gray-800">
+                  {product.imageUrl && (
+                    <Image
+                      src={product.imageUrl}
+                      alt={product.name}
+                      fill
+                      className="object-cover transition-transform duration-500 group-hover:scale-105"
+                    />
+                  )}
                 </div>
                 <div className="p-4">
-                  <h3 className="font-bold truncate">{product.name}</h3>
-                  <p className="text-gray-400">
-                    ${(product.price / 100).toFixed(2)}
+                  <h3 className="font-bold truncate text-white">{product.name}</h3>
+                  <p className="text-blue-400 font-medium">
+                    ${product.price}
                   </p>
                 </div>
               </Link>
@@ -165,11 +190,16 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* NEW ARRIVALS CAROUSEL (Keep existing) */}
+      {/* NEW ARRIVALS CAROUSEL */}
       <section className="py-20 bg-gray-900/30">
         <div className="container mx-auto px-4">
-          <h2 className="text-3xl font-bold mb-8">New Arrivals</h2>
-          <Carousel products={productsWithPrice.slice(0, 8)} />
+          <div className="flex justify-between items-end mb-8">
+             <h2 className="text-3xl font-bold">New Arrivals</h2>
+             <Link href="/products" className="text-blue-400 hover:text-blue-300 text-sm font-bold">View All &rarr;</Link>
+          </div>
+          
+          {/* We pass the FILTERED newArrivals list here */}
+          <Carousel products={newArrivals} />
         </div>
       </section>
     </div>
