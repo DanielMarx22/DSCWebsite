@@ -1,81 +1,88 @@
-import { defineField, defineType } from "sanity";
+import { defineField, defineType } from "sanity"
 
-export const product = defineType({
-  name: "product",
-  title: "Product (Coral/Fish)",
-  type: "document",
+export default defineType({
+  name: 'product',
+  title: 'Product',
+  type: 'document',
   fields: [
     defineField({
-      name: "title",
-      title: "Product Name",
-      type: "string",
+      name: 'name',
+      title: 'Name',
+      type: 'string',
       validation: (Rule) => Rule.required(),
     }),
     defineField({
-      name: "slug",
-      title: "Slug",
-      type: "slug",
+      name: 'slug',
+      title: 'Slug',
+      type: 'slug',
       options: {
-        source: "title",
+        source: 'name',
         maxLength: 96,
       },
       validation: (Rule) => Rule.required(),
     }),
     defineField({
-      name: "category",
-      title: "Category",
-      type: "string",
+      name: 'images',
+      title: 'Images',
+      type: 'array',
+      of: [{ type: 'image', options: { hotspot: true } }],
+    }),
+    
+    // --- NEW FILTERING LOGIC START ---
+    defineField({
+      name: 'category',
+      title: 'Main Category',
+      type: 'string',
+      description: 'The high-level bucket this item belongs to.',
       options: {
         list: [
-          { title: "Corals", value: "corals" },
-          { title: "Fish", value: "fish" },
-          { title: "Inverts", value: "inverts" },
-          { title: "Supplies", value: "supplies" },
+            { title: 'Fish', value: 'fish' },
+            { title: 'Corals', value: 'corals' },
+            { title: 'Inverts', value: 'inverts' },
+            { title: 'Supplies', value: 'supplies' },
         ],
+        layout: 'radio', 
       },
+      validation: (Rule) => Rule.required(),
     }),
     defineField({
-      name: "inventory",
-      title: "Inventory Count",
-      type: "number",
-      validation: (Rule) => Rule.required().min(0),
-    }),
-    defineField({
-      name: "short_description",
-      title: "Short Description (Card)",
-      type: "text",
-      rows: 2,
-    }),
-    defineField({
-      name: "description",
-      title: "Full Description / Care Guide",
-      type: "array",
-      of: [{ type: "block" }],
-    }),
-    defineField({
-      name: "stripeId",
-      title: "Stripe Product ID",
-      type: "string",
-      description: "Paste the ID from Stripe here (e.g. prod_TPw...)",
-    }),
-    defineField({
-      name: "image",
-      title: "Main Image",
-      type: "image",
+      name: 'tags',
+      title: 'Tags / Keywords',
+      description: 'Type a tag and hit Enter (e.g. "Tang", "LPS", "Reef Safe", "Algae Eater"). These will become filters on the website.',
+      type: 'array',
+      of: [{ type: 'string' }],
       options: {
-        hotspot: true,
+        layout: 'tags',
       },
     }),
+    // --- NEW FILTERING LOGIC END ---
+
     defineField({
-      name: "tags",
-      title: "Tags / Keywords",
-      type: "array",
-      of: [{ type: "string" }],
-      options: {
-        layout: "tags",
-      },
-      description:
-        'Add anything here: "Blue", "Aussie", "Ultra", "High End". Great for future filtering.',
+      name: 'description',
+      title: 'Description',
+      type: 'blockContent', // Or 'text' if you aren't using rich text
+    }),
+    
+    // --- STRIPE / SQUARE INTEGRATION FIELDS ---
+    // We keep these flexible so they work for both Stripe (now) and Square (later)
+    defineField({
+      name: 'sku',
+      title: 'SKU / Stripe ID',
+      description: 'The Product ID from Stripe or Square',
+      type: 'string',
+    }),
+    defineField({
+        name: 'price',
+        title: 'Price (Fallback)',
+        description: 'Used for sorting. Real price comes from Stripe/Square.',
+        type: 'number',
+    }),
+    defineField({
+        name: 'inventory',
+        title: 'Inventory Count (Sanity Fallback)',
+        description: 'For manual control if needed. Real stock checks usually happen via API.',
+        type: 'number',
+        initialValue: 0
     }),
   ],
-});
+})
