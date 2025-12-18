@@ -1,28 +1,55 @@
 "use client";
 
-/**
- * This configuration is used to for the Sanity Studio that’s mounted on the `/app/studio/[[...tool]]` route
- */
-
 import { visionTool } from "@sanity/vision";
 import { defineConfig } from "sanity";
 import { structureTool } from "sanity/structure";
-
-// Go to https://www.sanity.io/docs/api-versioning to learn how API versioning works
 import { apiVersion, dataset, projectId } from "./sanity/env";
 import { schema } from "./sanity/schemaTypes";
-import { structure } from "./sanity/structure";
 
 export default defineConfig({
-  basePath: "/studio", // <--- IMPORTANT: This tells Sanity it lives at /studio
+  basePath: "/studio",
   projectId,
   dataset,
-  // Add and edit the content schema in the './sanity/schemaTypes' folder
   schema,
   plugins: [
-    structureTool({ structure }),
-    // Vision is a tool that lets you query your content with GROQ in the studio
-    // https://www.sanity.io/docs/the-vision-plugin
+    structureTool({
+      structure: (S) =>
+        S.list()
+          .title("Content")
+          .items([
+            // 1. Create a dedicated "Singleton" link for Checkout Settings
+            S.listItem()
+              .title("Checkout Settings")
+              .id("checkoutSettings")
+              .child(
+                S.document()
+                  .schemaType("checkoutSettings")
+                  .documentId("checkoutSettings") // Forces a constant ID
+              ),
+            S.divider(),
+            // 2. Automatically list all other document types (Products, etc.)
+            // but hide 'checkoutSettings' from this general list
+            ...S.documentTypeListItems().filter(
+              (item) => item.getId() !== "checkoutSettings"
+            ),
+          ]),
+    }),
     visionTool({ defaultApiVersion: apiVersion }),
   ],
+  // 3. Prevent the "New Document" menu from showing Checkout Settings
+  document: {
+    newDocumentOptions: (prev, { creationContext }) => {
+      if (creationContext.type === "global") {
+        return prev.filter((template) => template.templateId !== "checkoutSettings");
+      }
+      return prev;
+    },
+    // Prevent deleting the settings document
+    actions: (prev, { schemaType }) => {
+      if (schemaType === "checkoutSettings") {
+        return prev.filter((action) => action.action !== "delete" && action.action !== "duplicate");
+      }
+      return prev;
+    },
+  },
 });
