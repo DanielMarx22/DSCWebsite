@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
+import Script from "next/script"; // 👈 Import Next.js Script component
 import "./globals.css";
 import { Navbar } from "@/components/navbar";
-import { Footer } from "@/components/footer"; // 👈 1. Import the Footer
+import { Footer } from "@/components/footer";
 
 export const metadata: Metadata = {
   title: "Down South Corals",
@@ -15,16 +16,19 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      {/* Changed 'min-h-full' to 'min-h-screen' to ensure the footer 
-         stays at the bottom even on empty pages 
-      */}
+      <head>
+        {/* 1. Load Square Web Payments SDK */}
+        <Script
+          src="https://web.squarecdn.com/v1/payments.js"
+          strategy="beforeInteractive"
+        />
+      </head>
       <body className="flex min-h-screen flex-col bg-neutral-900 text-white">
         <Navbar />
-        {/* 'flex-grow' pushes the footer down */}
         <main className="flex-grow container mx-auto px-4 py-8">
           {children}
         </main>
-        <Footer /> {/* 👈 2. Add the component here */}
+        <Footer />
       </body>
     </html>
   );
