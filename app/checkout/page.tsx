@@ -1,5 +1,6 @@
 import { client } from "@/sanity/lib/client";
 import CheckoutClient from "@/components/checkout-client";
+import SquareLoader from "@/components/square-loader";
 
 // Updated to include calendar-specific fields from your Sanity Schema
 interface CheckoutSettings {
@@ -21,6 +22,8 @@ interface Product {
   category: string;
   inventory: number;
 }
+
+
 
 export default async function CheckoutPage() {
   // Fetching both recommendations and settings in parallel for better performance
@@ -55,7 +58,9 @@ export default async function CheckoutPage() {
 
   return (
     <div className="min-h-screen bg-black text-white">
-      {/* Passing recommendations and the new settings to the Client Component */}
+      {/* 1. Manually inject Square SDK via our client loader */}
+      <SquareLoader /> 
+      
       <CheckoutClient 
         recommendations={recommendations} 
         settings={settings} 

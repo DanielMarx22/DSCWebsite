@@ -5,9 +5,11 @@ export interface CartItem {
   id: string;
   name: string;
   price: number;
-  imageUrl?: string | null; // Allow null to match Sanity
+  imageUrl?: string | null;
   quantity: number;
-  maxQuantity: number; // 👈 NEW FIELD: The Ceiling
+  maxQuantity: number;
+  slug: string;
+  category: string; // 👈 Add this
 }
 
 interface CartState {

@@ -1,20 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* 👇 ADD THESE TWO BLOCKS 👇 */
   eslint: {
-    // Warning: This allows production builds to successfully complete even if
-    // your project has ESLint errors.
     ignoreDuringBuilds: true,
   },
   typescript: {
-    // !! WARN !!
-    // Dangerously allow production builds to successfully complete even if
-    // your project has type errors.
     ignoreBuildErrors: true,
   },
-
-  /* Keep your existing image config below */
   images: {
     remotePatterns: [
       {
@@ -24,6 +16,11 @@ const nextConfig: NextConfig = {
       {
         protocol: "https",
         hostname: "files.stripe.com",
+      },
+      /* Add Square for Catalog/Product images later */
+      {
+        protocol: "https",
+        hostname: "items-images-production.s3.us-west-2.amazonaws.com",
       },
     ],
   },

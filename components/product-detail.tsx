@@ -10,6 +10,8 @@ interface ProductDetailProps {
   product: {
     _id: string;
     title: string;
+    slug: string;
+    category: string;
     imageUrl: string | null;
     inventory: number;
     care_level?: string;
@@ -39,13 +41,20 @@ export const ProductDetail = ({
 
   const onAddItem = () => {
     if (isMaxQuantity) return;
+
+    console.log("Product Data:", product);
+
     addItem({
-      id: product.stripeId,
+      id: product._id,
       name: product.title,
       price: price || 0,
       imageUrl: product.imageUrl,
       quantity: 1,
-      maxQuantity: product.inventory, // 👈 PASS THE LIMIT HERE
+      maxQuantity: product.inventory,
+      // 1. Check if slug is an object or a string
+      slug: typeof product.slug === 'string' ? product.slug : (product.slug as any)?.current,
+      // 2. Ensure category is being pulled correctly
+      category: product.category || "uncategorized"
     });
   };
 

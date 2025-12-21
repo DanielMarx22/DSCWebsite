@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState, useMemo } from "react";
 import Image from "next/image";
 import Link from "next/link";
@@ -13,9 +14,10 @@ import { Truck, Store, AlertCircle, CalendarDays } from "lucide-react";
 import { DayPicker } from "react-day-picker";
 import { addDays, format, parseISO, isBefore, setHours, setMinutes, isSameDay } from "date-fns";
 import "react-day-picker/dist/style.css";
+import PaymentForm from "@/components/payment-form";
 
 interface CheckoutSettings {
-  allowedShippingDays: string[]; 
+  allowedShippingDays: string[];
   cutoffHour: number;
   blackoutDates?: string[];
   maxBookingWindowDays: number;
@@ -54,11 +56,12 @@ export default function CheckoutClient({ recommendations, settings }: Props) {
     taxRate: settings?.taxRate ?? 0,
   };
 
+  const router = useRouter();
   const { disabledDays, maxDate } = useMemo(() => {
     const now = new Date();
     const today = new Date();
     const cutoffTime = setMinutes(setHours(new Date(), activeSettings.cutoffHour), 0);
-    const allowedArrivalDays = activeSettings.allowedShippingDays.map(day => 
+    const allowedArrivalDays = activeSettings.allowedShippingDays.map(day =>
       ((parseInt(day) + 1) % 7).toString()
     );
 
@@ -66,7 +69,7 @@ export default function CheckoutClient({ recommendations, settings }: Props) {
     const blackoutDates = (activeSettings.blackoutDates || []).map(d => parseISO(d));
 
     const disabled = [
-      { before: addDays(today, 1) }, 
+      { before: addDays(today, 1) },
       { after: max },
       (date: Date) => {
         const dayOfWeek = date.getDay().toString();
@@ -97,13 +100,13 @@ export default function CheckoutClient({ recommendations, settings }: Props) {
   return (
     <div className="container mx-auto px-4 py-12 text-white bg-black min-h-screen">
       <h1 className="text-3xl font-bold mb-10 text-white">Checkout</h1>
-      
+
       <div className="flex flex-col lg:flex-row gap-12">
         <div className="flex-1 space-y-10">
           <section className="space-y-6">
             <h2 className="text-xl font-bold text-white">Delivery Options</h2>
-            <RadioGroup 
-              defaultValue="ship" 
+            <RadioGroup
+              defaultValue="ship"
               onValueChange={(val) => { setDeliveryMethod(val as "ship" | "pickup"); setSelectedDate(undefined); }}
               className="grid grid-cols-1 md:grid-cols-2 gap-4"
             >
@@ -135,7 +138,7 @@ export default function CheckoutClient({ recommendations, settings }: Props) {
                       modifiersStyles={{
                         disabled: { color: "#26267aa8", opacity: "0.5", cursor: "not-allowed" },
                         // Simplified: let classNames handle the shape and background
-                        selected: { color: "white" }, 
+                        selected: { color: "white" },
                         today: { color: "#313cffff", fontWeight: "900" }
                       }}
                       classNames={{
@@ -158,20 +161,86 @@ export default function CheckoutClient({ recommendations, settings }: Props) {
             <h2 className="text-xl font-bold text-white">Your Order</h2>
             <ul className="space-y-6">
               {items.map((item) => (
-                <li key={item.id} className="flex gap-4 sm:gap-6 border-b border-gray-800 pb-6 items-center">
-                  <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg border border-gray-800 bg-gray-900">
-                    {item.imageUrl && <Image src={item.imageUrl} alt={item.name} fill className="object-cover" />}
+                <li
+                  key={item.id}
+                  onClick={() => {
+                    // Ensure we don't navigate if data is still missing
+                    if (item.category && item.slug) {
+                      router.push(`/products/${item.category}/${item.slug}`);
+                    } else {
+                      console.error("Missing navigation data for item:", item);
+                    }
+                  }}
+                  className="group relative flex gap-4 sm:gap-6 border-b border-gray-800 pb-6 items-center hover:bg-white/[0.03] cursor-pointer transition-colors rounded-xl p-2"
+                >
+                  {/* Product Image */}
+                  <div className="relative h-24 w-24 flex-shrink-0 overflow-hidden rounded-xl border border-gray-800 bg-gray-900">
+                    <Image
+                      src={item.imageUrl || ""}
+                      alt={item.name}
+                      fill
+                      sizes="96px"
+                      className="object-cover"
+                    />
                   </div>
-                  <div className="flex flex-1 justify-between items-center text-white">
+
+                  <div className="flex flex-1 flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
                     <div>
-                      <h3 className="text-md font-bold text-white">{item.name}</h3>
-                      <p className="text-sm text-gray-400">${item.price.toFixed(2)} x {item.quantity}</p>
+                      <h3 className="text-lg font-bold text-white group-hover:text-blue-400 transition-colors">
+                        {item.name}
+                      </h3>
+                      <p className="text-sm text-gray-400 mb-2 font-medium">
+                        ${item.price.toFixed(2)} x {item.quantity}
+                      </p>
+
+                      {/* QUANTITY CONTROLS */}
+                      <div className="flex items-center gap-3 bg-gray-900 border border-gray-800 w-fit rounded-lg px-2 py-1">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation(); // 2. CRITICAL: Prevents navigation when clicking button
+                            updateQuantity(item.id, "decrease");
+                          }}
+                          className="text-gray-400 hover:text-white px-2 text-xl font-bold transition-colors"
+                        >
+                          −
+                        </button>
+                        <span className="text-white font-bold min-w-[20px] text-center">{item.quantity}</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation(); // 2. CRITICAL: Prevents navigation when clicking button
+                            updateQuantity(item.id, "increase");
+                          }}
+                          className="text-gray-400 hover:text-white px-2 text-xl font-bold transition-colors"
+                        >
+                          +
+                        </button>
+                      </div>
                     </div>
-                    <p className="font-bold text-blue-400">${(item.price * item.quantity).toFixed(2)}</p>
+
+                    <div className="flex flex-col items-end gap-1">
+                      <p className="font-bold text-xl text-blue-400">
+                        ${(item.price * item.quantity).toFixed(2)}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation(); // 2. CRITICAL: Prevents navigation when clicking button
+                          removeItem(item.id);
+                        }}
+                        className="text-xs text-red-500 hover:text-red-400 hover:underline transition-colors"
+                      >
+                        Remove
+                      </button>
+                    </div>
                   </div>
                 </li>
               ))}
             </ul>
+          </section>
+          <section className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <PaymentForm total={total} />
           </section>
         </div>
 
@@ -199,12 +268,12 @@ export default function CheckoutClient({ recommendations, settings }: Props) {
 
       {recommendations && recommendations.length > 0 && (
         <div className="mt-24 border-t border-gray-800 pt-16">
-            <h2 className="text-2xl font-bold mb-10 text-white">You Might Also Like</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8">
-                {recommendations.map((product) => (
-                    <ProductCard key={product._id} data={product} />
-                ))}
-            </div>
+          <h2 className="text-2xl font-bold mb-10 text-white">You Might Also Like</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8">
+            {recommendations.map((product) => (
+              <ProductCard key={product._id} data={product} />
+            ))}
+          </div>
         </div>
       )}
     </div>
