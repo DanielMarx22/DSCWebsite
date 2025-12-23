@@ -5,7 +5,8 @@ import product from "./product";
 import settings from "./settings";
 import policy from "./policy";
 import { checkoutSettings } from "./checkoutSettings";
+import paymentSettings from "./paymentSettings"; // 👈 Added this
 
 export const schema: { types: SchemaTypeDefinition[] } = {
-  types: [product, settings, policy, checkoutSettings],
+  types: [product, settings, policy, checkoutSettings, paymentSettings],
 };

@@ -1,12 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import { useCartStore } from "@/store/cart-store";
-import { checkoutAction } from "@/app/checkout/checkout-action";
 import { ProductCard } from "@/components/product-card";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
@@ -14,7 +12,8 @@ import { Truck, Store, AlertCircle, CalendarDays } from "lucide-react";
 import { DayPicker } from "react-day-picker";
 import { addDays, format, parseISO, isBefore, setHours, setMinutes, isSameDay } from "date-fns";
 import "react-day-picker/dist/style.css";
-import PaymentForm from "@/components/payment-form";
+import PaymentForm, { PaymentFormHandle } from "@/components/payment-form";
+import { processSquarePayment } from "@/app/checkout/payment-action";
 
 interface CheckoutSettings {
   allowedShippingDays: string[];
@@ -39,12 +38,18 @@ interface Product {
 interface Props {
   recommendations: Product[];
   settings: CheckoutSettings | null;
+  paymentMethods: string[]; // 👈 Passed from Sanity
 }
 
-export default function CheckoutClient({ recommendations, settings }: Props) {
+export default function CheckoutClient({ recommendations, settings, paymentMethods }: Props) {
   const { items, removeItem, updateQuantity } = useCartStore();
   const [deliveryMethod, setDeliveryMethod] = useState<"ship" | "pickup">("ship");
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>("card");
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  // Ref to trigger the child component payment submission
+  const paymentFormRef = useRef<PaymentFormHandle>(null);
 
   const activeSettings: CheckoutSettings = {
     allowedShippingDays: settings?.allowedShippingDays || ["1", "2", "3"],
@@ -57,6 +62,7 @@ export default function CheckoutClient({ recommendations, settings }: Props) {
   };
 
   const router = useRouter();
+
   const { disabledDays, maxDate } = useMemo(() => {
     const now = new Date();
     const today = new Date();
@@ -86,13 +92,53 @@ export default function CheckoutClient({ recommendations, settings }: Props) {
   const estimatedTax = subtotal * (activeSettings.taxRate / 100);
   const total = subtotal + shipping + estimatedTax;
 
+  // Validation: Button is only active if these pass
+  const isFormValid = useMemo(() => {
+    if (items.length === 0) return false;
+    if (deliveryMethod === "ship" && !selectedDate) return false;
+    return true;
+  }, [items, deliveryMethod, selectedDate]);
+
+  const handlePlaceOrder = async () => {
+    setIsProcessing(true);
+
+    try {
+      // 1. Trigger Tokenization in Child Component
+      const paymentResult = await paymentFormRef.current?.submitPayment();
+
+      if (!paymentResult || paymentResult.error) {
+        alert("Payment Failed: " + (paymentResult?.error || "Unknown error"));
+        setIsProcessing(false);
+        return;
+      }
+
+      const token = paymentResult.token!;
+
+      // 2. Send Token to Server Action
+      const charge = await processSquarePayment(token, items);
+
+      if (charge.success && charge.payment) { // FIX: Check if payment exists
+        // Redirect to success page
+        window.location.href = `/checkout/success?orderId=${charge.payment.id}`;
+      } else {
+        alert("Transaction Declined: " + (charge.error || "Unknown error"));
+      }
+
+    } catch (err) {
+      console.error(err);
+      alert("An unexpected error occurred.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   if (items.length === 0) {
     return (
       <div className="container mx-auto px-4 py-20 text-center text-white">
         <h1 className="text-4xl font-bold mb-4">Your Cart is Empty</h1>
-        <Button asChild size="lg" className="rounded-full">
-          <Link href="/products">Start Shopping</Link>
-        </Button>
+        <Link href="/products" className="inline-block bg-blue-600 px-8 py-3 rounded-full font-bold hover:bg-blue-500 transition-colors">
+          Start Shopping
+        </Link>
       </div>
     );
   }
@@ -126,7 +172,8 @@ export default function CheckoutClient({ recommendations, settings }: Props) {
               ) : (
                 <div className="calendar-dark">
                   <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-blue-400"><CalendarDays className="w-5 h-5" /> Select Arrival Date</h3>
-                  <div className="flex justify-center bg-transparent p-6 rounded-xl border border-grey-700 shadow-inner">
+                  {/* MOBILE FIX: Changed p-6 to p-2 sm:p-6 and added overflow-x-auto */}
+                  <div className="flex justify-center bg-transparent p-2 sm:p-6 rounded-xl border border-gray-800 shadow-inner overflow-x-auto">
                     <DayPicker
                       mode="single"
                       selected={selectedDate}
@@ -137,13 +184,11 @@ export default function CheckoutClient({ recommendations, settings }: Props) {
                       modifiers={{ disabled: disabledDays }}
                       modifiersStyles={{
                         disabled: { color: "#26267aa8", opacity: "0.5", cursor: "not-allowed" },
-                        // Simplified: let classNames handle the shape and background
                         selected: { color: "white" },
                         today: { color: "#313cffff", fontWeight: "900" }
                       }}
                       classNames={{
                         day: "text-white font-bold p-2 hover:bg-gray-800 rounded-md transition-colors",
-                        // Forces the selection to be a blue circle with no square background or ring
                         selected: "!bg-blue-700 !text-white !rounded-full !border-none !outline-none !ring-0",
                         caption: "text-white flex justify-center py-2 mb-4 font-bold text-lg",
                         head_cell: "text-gray-400 font-medium pb-2",
@@ -164,11 +209,10 @@ export default function CheckoutClient({ recommendations, settings }: Props) {
                 <li
                   key={item.id}
                   onClick={() => {
-                    // Ensure we don't navigate if data is still missing
-                    if (item.category && item.slug) {
-                      router.push(`/products/${item.category}/${item.slug}`);
-                    } else {
-                      console.error("Missing navigation data for item:", item);
+                    // Fallback to 'all' if uncategorized to prevent broken link
+                    const categoryPath = item.category === "uncategorized" ? "all" : item.category;
+                    if (item.slug) {
+                      router.push(`/products/${categoryPath}/${item.slug}`);
                     }
                   }}
                   className="group relative flex gap-4 sm:gap-6 border-b border-gray-800 pb-6 items-center hover:bg-white/[0.03] cursor-pointer transition-colors rounded-xl p-2"
@@ -198,7 +242,7 @@ export default function CheckoutClient({ recommendations, settings }: Props) {
                         <button
                           type="button"
                           onClick={(e) => {
-                            e.stopPropagation(); // 2. CRITICAL: Prevents navigation when clicking button
+                            e.stopPropagation();
                             updateQuantity(item.id, "decrease");
                           }}
                           className="text-gray-400 hover:text-white px-2 text-xl font-bold transition-colors"
@@ -209,7 +253,7 @@ export default function CheckoutClient({ recommendations, settings }: Props) {
                         <button
                           type="button"
                           onClick={(e) => {
-                            e.stopPropagation(); // 2. CRITICAL: Prevents navigation when clicking button
+                            e.stopPropagation();
                             updateQuantity(item.id, "increase");
                           }}
                           className="text-gray-400 hover:text-white px-2 text-xl font-bold transition-colors"
@@ -226,7 +270,7 @@ export default function CheckoutClient({ recommendations, settings }: Props) {
                       <button
                         type="button"
                         onClick={(e) => {
-                          e.stopPropagation(); // 2. CRITICAL: Prevents navigation when clicking button
+                          e.stopPropagation();
                           removeItem(item.id);
                         }}
                         className="text-xs text-red-500 hover:text-red-400 hover:underline transition-colors"
@@ -239,11 +283,21 @@ export default function CheckoutClient({ recommendations, settings }: Props) {
               ))}
             </ul>
           </section>
+
+          {/* PAYMENT FORM SECTION */}
           <section className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <PaymentForm total={total} />
+            <div className="p-8 border border-gray-800 bg-gray-900/60 rounded-3xl backdrop-blur-sm shadow-2xl">
+              {/* We pass the ref so the sidebar button can trigger this */}
+              <PaymentForm
+                ref={paymentFormRef}
+                allowedMethods={paymentMethods}
+                onMethodSelect={setSelectedPaymentMethod}
+              />
+            </div>
           </section>
         </div>
 
+        {/* SIDEBAR */}
         <div className="lg:w-96 flex-shrink-0">
           <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800 sticky top-24 shadow-2xl">
             <h2 className="text-xl font-bold mb-6 text-white">Order Summary</h2>
@@ -255,13 +309,24 @@ export default function CheckoutClient({ recommendations, settings }: Props) {
                 <span>Total</span><span>USD ${total.toFixed(2)}</span>
               </div>
             </div>
-            <form action={checkoutAction}>
-              <input type="hidden" name="items" value={JSON.stringify(items)} />
-              <input type="hidden" name="arrivalDate" value={selectedDate?.toISOString() || ""} />
-              <Button type="submit" size="lg" disabled={deliveryMethod === "ship" && !selectedDate} className="w-full rounded-full bg-blue-600 hover:bg-blue-500 text-lg font-bold py-7 shadow-lg shadow-blue-900/20 disabled:opacity-50">
-                {deliveryMethod === "ship" && !selectedDate ? "Select Arrival Date" : "Pay now"}
-              </Button>
-            </form>
+
+            {/* NEW PAY BUTTON - Logic controlled here */}
+            <button
+              onClick={handlePlaceOrder}
+              disabled={!isFormValid || isProcessing}
+              className={`w-full py-5 font-black text-lg rounded-2xl transition-all shadow-xl 
+                    ${!isFormValid || isProcessing
+                  ? "bg-gray-700 text-gray-500 cursor-not-allowed grayscale"
+                  : "bg-gradient-to-r from-blue-700 to-blue-600 hover:from-blue-600 hover:to-blue-500 text-white shadow-blue-900/40 active:scale-[0.98]"
+                }
+                `}
+            >
+              {isProcessing ? "Processing..." : deliveryMethod === "ship" && !selectedDate ? "Select Arrival Date" : `Pay Now • $${total.toFixed(2)}`}
+            </button>
+
+            <p className="text-[10px] text-gray-500 text-center uppercase tracking-tighter mt-4">
+              Protected by Square SSL Encryption
+            </p>
           </div>
         </div>
       </div>

@@ -1,70 +1,40 @@
 import { client } from "@/sanity/lib/client";
 import CheckoutClient from "@/components/checkout-client";
-import SquareLoader from "@/components/square-loader";
 
-// Updated to include calendar-specific fields from your Sanity Schema
-interface CheckoutSettings {
-  allowedShippingDays: string[];
-  blackoutDates: string[];
-  maxBookingWindowDays: number;
-  cutoffHour: number; // Added for the 5 PM (or custom) cutoff logic
-  pickupWarning: string;
-  flatRateShipping: number;
-  taxRate: number;
+// Define what we fetch from Sanity
+interface CheckoutPageData {
+  settings: any;
+  recommendations: any[];
+  paymentMethods: string[];
 }
 
-interface Product {
-  _id: string;
-  name: string;
-  slug: string;
-  price: number;
-  imageUrl: string;
-  category: string;
-  inventory: number;
-}
-
-
+export const dynamic = "force-dynamic"; // Ensure we don't cache stale settings
 
 export default async function CheckoutPage() {
-  // Fetching both recommendations and settings in parallel for better performance
-  const [recommendations, settings] = await Promise.all([
-    client.fetch<Product[]>(
-      `*[_type == "product" && inventory > 0] | order(_createdAt desc)[0...4] {
+  // Fetch Settings, Recommendations, AND Payment Methods in one go
+  const data = await client.fetch<CheckoutPageData>(`
+    {
+      "settings": *[_type == "checkoutSettings"][0],
+      "recommendations": *[_type == "product"][0...4] {
         _id,
         "name": title,
         "slug": slug.current,
-        "imageUrl": images[0].asset->url,
         price,
-        inventory,
-        category
-      }`,
-      {},
-      { next: { revalidate: 0 } } // Forces fresh data on every request
-    ),
-    client.fetch<CheckoutSettings>(
-      `*[_type == "checkoutSettings"][0]{
-        allowedShippingDays,
-        blackoutDates,
-        maxBookingWindowDays,
-        cutoffHour,
-        pickupWarning,
-        flatRateShipping,
-        taxRate
-      }`,
-      {},
-      { next: { revalidate: 0 } } // Ensures owner's Studio changes show up instantly
-    )
-  ]);
+        "imageUrl": images[0].asset->url,
+        "category": category->slug.current,
+        inventory
+      },
+      // Fetch enabled methods, default to empty list if null
+      "paymentMethods": *[_type == "paymentSettings"][0].enabledMethods
+    }
+  `);
 
   return (
-    <div className="min-h-screen bg-black text-white">
-      {/* 1. Manually inject Square SDK via our client loader */}
-      <SquareLoader /> 
-      
-      <CheckoutClient 
-        recommendations={recommendations} 
-        settings={settings} 
-      />
-    </div>
+    <CheckoutClient
+      recommendations={data.recommendations || []}
+      settings={data.settings || null}
+      // Pass the methods here. If null, fallback to empty array.
+      paymentMethods={data.paymentMethods || []}
+    />
   );
 }

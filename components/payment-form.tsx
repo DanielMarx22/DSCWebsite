@@ -1,84 +1,134 @@
 "use client";
 
-import { processSquarePayment } from "@/app/checkout/payment-action";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useImperativeHandle, forwardRef, useRef } from "react";
 
-// 1. Define the interface for the props
-interface PaymentProps {
-    total: number;
+export interface PaymentFormHandle {
+    submitPayment: () => Promise<{ token?: string; error?: string }>;
 }
 
-export default function PaymentForm({ total }: PaymentProps) { // 2. Destructure total here
-    const [card, setCard] = useState<any>(null);
+interface PaymentFormProps {
+    allowedMethods: string[];
+    onMethodSelect: (method: string) => void;
+}
 
-    useEffect(() => {
-        const startSquare = async () => {
-            if (!window.Square) return;
+const PaymentForm = forwardRef<PaymentFormHandle, PaymentFormProps>(
+    ({ allowedMethods = [], onMethodSelect }, ref) => {
+        const [selectedMethod, setSelectedMethod] = useState<string>("card");
+        const [status, setStatus] = useState("Loading payment secure fields...");
+        const cardRef = useRef<any>(null);
 
-            const payments = window.Square.payments(
-                process.env.NEXT_PUBLIC_SQUARE_APPLICATION_ID!,
-                process.env.NEXT_PUBLIC_SQUARE_LOCATION_ID!
-            );
-
-            try {
-                const cardElement = await payments.card();
-                await cardElement.attach("#card-container");
-                setCard(cardElement);
-            } catch (e) {
-                console.error("Square Card Error:", e);
+        useImperativeHandle(ref, () => ({
+            async submitPayment() {
+                if (!cardRef.current) return { error: "Payment form is not ready yet." };
+                try {
+                    const result = await cardRef.current.tokenize();
+                    if (result.status === "OK") {
+                        return { token: result.token };
+                    } else {
+                        return { error: result.errors[0].message };
+                    }
+                } catch (e: any) {
+                    return { error: e.message };
+                }
             }
+        }));
+
+        useEffect(() => {
+            let timeoutId: NodeJS.Timeout;
+            let intervalId: NodeJS.Timeout;
+
+            const initializeSquare = async () => {
+                if (!process.env.NEXT_PUBLIC_SQUARE_APPLICATION_ID) {
+                    setStatus("Error: Missing Square App ID");
+                    return;
+                }
+
+                try {
+                    // @ts-ignore
+                    const payments = window.Square.payments(
+                        process.env.NEXT_PUBLIC_SQUARE_APPLICATION_ID,
+                        process.env.NEXT_PUBLIC_SQUARE_LOCATION_ID
+                    );
+
+                    const card = await payments.card();
+                    await card.attach("#card-container");
+                    cardRef.current = card;
+                    setStatus(""); // Success! Clear loading message
+                } catch (e) {
+                    console.error("Square Init Failed:", e);
+                    setStatus("Failed to load payment form. Please refresh.");
+                }
+            };
+
+            // Check for Square every 500ms
+            const checkSquare = () => {
+                // @ts-ignore
+                if (window.Square) {
+                    clearInterval(intervalId);
+                    clearTimeout(timeoutId);
+                    initializeSquare();
+                }
+            };
+
+            intervalId = setInterval(checkSquare, 500);
+
+            // Stop waiting after 10 seconds and show error
+            timeoutId = setTimeout(() => {
+                clearInterval(intervalId);
+                if (status.includes("Loading")) {
+                    setStatus("Error: Payment script failed to load. Check your connection.");
+                }
+            }, 10000);
+
+            return () => {
+                clearInterval(intervalId);
+                clearTimeout(timeoutId);
+            };
+        }, []);
+
+        const renderIcon = (type: string, label: string) => {
+            if (!allowedMethods.includes(type)) return null;
+            const isSelected = selectedMethod === type;
+            return (
+                <div
+                    onClick={() => { setSelectedMethod(type); onMethodSelect(type); }}
+                    className={`cursor-pointer border rounded-lg p-3 flex flex-col items-center gap-2 transition-all ${isSelected ? "border-blue-500 bg-blue-500/10 ring-1 ring-blue-500" : "border-gray-700 bg-gray-900 hover:bg-gray-800"
+                        }`}
+                >
+                    <div className="font-bold uppercase text-xs text-gray-300">{label}</div>
+                </div>
+            );
         };
 
-        startSquare();
-    }, []);
+        return (
+            <div className="space-y-6">
+                <h2 className="text-xl font-bold text-white">Payment Method</h2>
 
-    const handlePayment = async () => {
-        if (!card) return;
-        const result = await card.tokenize();
-        if (result.status === "OK") {
-            const charge = await processSquarePayment(result.token, total);
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                    {renderIcon("visa", "Visa")}
+                    {renderIcon("mastercard", "Mastercard")}
+                    {renderIcon("amex", "Amex")}
+                    {renderIcon("venmo", "Venmo")}
+                    {renderIcon("giftcard", "Gift Card")}
+                </div>
 
-            if (charge.success) {
-                alert("Payment Successful! Real money has been moved.");
-                // Clear cart or redirect to success page
-            } else {
-                alert("Payment Failed: " + charge.error);
-            }
-        }
-    };
+                <div className="relative min-h-[100px]">
+                    {/* Show status message if loading or error */}
+                    {status && (
+                        <div className="absolute inset-0 flex items-center justify-center z-10 bg-gray-900/80 rounded-xl">
+                            <p className="text-sm text-yellow-500 font-mono animate-pulse">{status}</p>
+                        </div>
+                    )}
 
-    return (
-        <div className="mt-8 space-y-6 p-8 border border-gray-800 bg-gray-900/60 rounded-3xl backdrop-blur-sm shadow-2xl">
-            <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-white">Secure Payment</h2>
-                <div className="flex gap-2">
-                    {/* Visual indicators for the owner/customer */}
-                    <div className="h-6 w-10 bg-gray-800 rounded border border-gray-700 flex items-center justify-center text-[10px] text-gray-500 font-bold uppercase">Visa</div>
-                    <div className="h-6 w-10 bg-gray-800 rounded border border-gray-700 flex items-center justify-center text-[10px] text-gray-500 font-bold uppercase">MC</div>
+                    {/* The white box for the card input */}
+                    <div className="p-4 bg-white rounded-xl shadow-inner min-h-[50px]">
+                        <div id="card-container" />
+                    </div>
                 </div>
             </div>
+        );
+    }
+);
 
-            <div className="space-y-2">
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-widest">Card Details</label>
-                {/* This container will now have a subtle border 
-          and some padding to look better on the dark UI 
-      */}
-                <div
-                    id="card-container"
-                    className="p-4 bg-white rounded-xl shadow-inner min-h-[90px] transition-all focus-within:ring-2 focus-within:ring-blue-500"
-                />
-            </div>
-
-            <button
-                onClick={handlePayment}
-                className="w-full py-5 bg-gradient-to-r from-blue-700 to-blue-600 hover:from-blue-600 hover:to-blue-500 text-white font-black text-lg rounded-2xl transition-all shadow-xl shadow-blue-900/40 active:scale-[0.98]"
-            >
-                Place Order • ${total.toFixed(2)}
-            </button>
-
-            <p className="text-[10px] text-gray-500 text-center uppercase tracking-tighter">
-                Protected by Square SSL Encryption
-            </p>
-        </div>
-    );
-}
+PaymentForm.displayName = "PaymentForm";
+export default PaymentForm;
