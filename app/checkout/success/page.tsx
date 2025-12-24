@@ -1,82 +1,177 @@
 "use client";
 
 import { useEffect, useState, Suspense } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { CheckCircle, ArrowRight, ShoppingBag } from "lucide-react";
+import { CheckCircle, ArrowRight, Printer, Mail, HelpCircle } from "lucide-react";
 import { useCartStore } from "@/store/cart-store";
 import { Button } from "@/components/ui/button";
+import { ProductCard } from "@/components/product-card";
+import { getOrderDetails } from "./actions";
 
 function SuccessContent() {
     const searchParams = useSearchParams();
-    const router = useRouter();
     const orderId = searchParams.get("orderId");
     const { clearCart } = useCartStore();
-    const [mounted, setMounted] = useState(false);
+
+    const [data, setData] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        setMounted(true);
-        // 1. Clear the cart immediately upon successful load
         clearCart();
 
-        // Optional: confetti or analytics events could go here
-    }, [clearCart]);
+        if (orderId) {
+            getOrderDetails(orderId).then((res) => {
+                if (res.success) {
+                    setData(res);
+                }
+                setLoading(false);
+            });
+        }
+    }, [orderId, clearCart]);
 
-    if (!mounted) return null;
+    if (loading) {
+        return <div className="text-center py-20 text-white animate-pulse">Loading receipt details...</div>;
+    }
+
+    if (!data || !data.order) {
+        return (
+            <div className="text-center py-20 text-white">
+                <h1 className="text-2xl font-bold mb-4">Order not found</h1>
+                <Button asChild><Link href="/">Return Home</Link></Button>
+            </div>
+        );
+    }
+
+    const { order, recommendations, email } = data;
+
+    const total = (Number(order.totalMoney?.amount || 0) / 100).toFixed(2);
+    const tax = (Number(order.totalTaxMoney?.amount || 0) / 100).toFixed(2);
 
     return (
-        <div className="min-h-[60vh] flex flex-col items-center justify-center text-center space-y-8 animate-in fade-in zoom-in duration-500">
+        <div className="min-h-screen py-12 space-y-12">
 
-            {/* Success Icon */}
-            <div className="relative">
-                <div className="absolute inset-0 bg-green-500 blur-2xl opacity-20 rounded-full" />
-                <CheckCircle className="w-24 h-24 text-green-500 relative z-10" />
-            </div>
+            {/* HEADER */}
+            <div className="flex flex-col items-center justify-center text-center space-y-6">
+                <div className="relative">
+                    <div className="absolute inset-0 bg-green-500 blur-3xl opacity-20 rounded-full" />
+                    <CheckCircle className="w-20 h-20 text-green-500 relative z-10" />
+                </div>
+                <div>
+                    <h1 className="text-4xl font-extrabold text-white mb-2">Order Confirmed!</h1>
+                    <p className="text-gray-400 text-lg mb-2">Order #{order.id.slice(0, 8)}</p>
 
-            <div className="space-y-4 max-w-lg">
-                <h1 className="text-4xl font-extrabold text-white">Payment Successful!</h1>
-                <p className="text-gray-400 text-lg">
-                    Thank you for your order. We have received your payment and sent a confirmation email to you.
-                </p>
-            </div>
-
-            {/* Order Details Card */}
-            <div className="bg-gray-900 border border-gray-800 p-8 rounded-2xl w-full max-w-md shadow-2xl">
-                <div className="flex flex-col gap-4">
-                    <div className="flex justify-between items-center pb-4 border-b border-gray-800">
-                        <span className="text-gray-400">Order ID</span>
-                        <span className="font-mono text-blue-400 font-bold">
-                            {orderId ? `#${orderId.slice(0, 8)}...` : "Pending"}
-                        </span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                        <span className="text-gray-400">Status</span>
-                        <span className="px-3 py-1 bg-green-500/20 text-green-400 text-sm font-bold rounded-full">
-                            Paid
-                        </span>
-                    </div>
+                    {/* EMAIL CONFIRMATION BADGE */}
+                    {email && (
+                        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-blue-900/30 border border-blue-800 text-blue-200 text-sm font-medium">
+                            <Mail className="w-4 h-4" />
+                            Receipt sent to {email}
+                        </div>
+                    )}
                 </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md">
-                <Button asChild size="lg" className="w-full rounded-full bg-blue-600 hover:bg-blue-500 text-lg font-bold h-14">
-                    <Link href="/products">
-                        Continue Shopping <ArrowRight className="ml-2 w-5 h-5" />
-                    </Link>
-                </Button>
+            {/* RECEIPT CARD */}
+            <div className="max-w-2xl mx-auto bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden shadow-2xl">
+                <div className="p-6 border-b border-gray-800 flex justify-between items-center bg-gray-950/50">
+                    <h2 className="font-bold text-white text-lg">Receipt</h2>
+                    <span className="text-sm text-gray-500">{new Date(order.createdAt).toLocaleDateString()}</span>
+                </div>
 
-                {/* Optional: Add a button to view account/orders if you have that page later */}
+                <div className="p-6 space-y-6">
+                    <ul className="space-y-4">
+                        {order.lineItems?.map((item: any, i: number) => (
+                            <li key={i} className="flex justify-between items-center text-gray-300">
+                                <div className="flex items-center gap-3">
+                                    <span className="font-bold text-white">{item.quantity}x</span>
+                                    <span>{item.name}</span>
+                                </div>
+                                <span className="font-mono">
+                                    ${(Number(item.basePriceMoney?.amount || 0) / 100).toFixed(2)}
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
+
+                    <div className="border-t border-gray-800 my-4" />
+
+                    <div className="space-y-2 text-right">
+                        <div className="flex justify-between text-gray-500 text-sm">
+                            <span>Tax</span>
+                            <span>${tax}</span>
+                        </div>
+                        <div className="flex justify-between text-white font-bold text-xl pt-2">
+                            <span>Total</span>
+                            <span>${total}</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* ACTION BUTTONS */}
+                <div className="p-6 bg-gray-950/50 border-t border-gray-800 flex flex-col gap-4">
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* 1. VIEW OFFICIAL RECEIPT (Fixed: Black Text on White) */}
+                        {data.receiptUrl && data.receiptUrl !== "#" ? (
+                            <Button
+                                asChild
+                                className="w-full bg-white text-black hover:bg-gray-200 font-bold border-0"
+                            >
+                                <a href={data.receiptUrl} target="_blank" rel="noopener noreferrer">
+                                    <Printer className="w-4 h-4 mr-2" /> View Official Receipt
+                                </a>
+                            </Button>
+                        ) : (
+                            <Button
+                                disabled
+                                className="w-full bg-gray-800 text-gray-400 cursor-not-allowed border border-gray-700"
+                            >
+                                <Printer className="w-4 h-4 mr-2" /> Receipt Loading...
+                            </Button>
+                        )}
+
+                        {/* 2. CONTINUE SHOPPING */}
+                        <Button asChild className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold">
+                            <Link href="/products">
+                                Shop Again <ArrowRight className="w-4 h-4 ml-2" />
+                            </Link>
+                        </Button>
+                    </div>
+
+                    <div className="text-center">
+                        <Button
+                            asChild
+                            variant="link"
+                            className="text-gray-500 hover:text-white"
+                        >
+                            <Link href="/contact">
+                                <HelpCircle className="w-4 h-4 mr-2" /> Need help with this order?
+                            </Link>
+                        </Button>
+                    </div>
+
+                </div>
             </div>
+
+            {/* RECOMMENDATIONS */}
+            {recommendations.length > 0 && (
+                <div className="border-t border-gray-800 pt-12">
+                    <h2 className="text-2xl font-bold text-white mb-8 text-center">You Might Also Like</h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
+                        {recommendations.map((product: any) => (
+                            <ProductCard key={product._id} data={product} />
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
 
 export default function SuccessPage() {
     return (
-        <div className="container mx-auto px-4 py-20">
-            {/* Suspense is required when using useSearchParams in Next.js Client Components */}
-            <Suspense fallback={<div className="text-white text-center">Loading confirmation...</div>}>
+        <div className="container mx-auto px-4">
+            <Suspense fallback={<div className="text-white text-center py-20">Loading...</div>}>
                 <SuccessContent />
             </Suspense>
         </div>
