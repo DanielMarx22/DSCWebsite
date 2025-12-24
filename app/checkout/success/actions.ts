@@ -8,9 +8,9 @@ const square = new SquareClient({
     environment: SquareEnvironment.Production,
 });
 
-export async function getOrderDetails(orderId: string) {
-    // --- TEST MODE BLOCK (Keep this if you want to test styling locally) ---
-    if (orderId === "test-preview") {
+export async function getOrderDetails(lookupId: string) {
+    // --- TEST MODE BLOCK ---
+    if (lookupId === "test-preview") {
         return {
             success: true,
             order: {
@@ -22,29 +22,52 @@ export async function getOrderDetails(orderId: string) {
             },
             recommendations: [],
             receiptUrl: "#",
-            email: "test@example.com" // Mock email
+            email: "test@example.com"
         };
     }
     // --- END TEST MODE ---
 
     try {
+        let orderId = lookupId;
+        let email = null;
+        let receiptUrl = null;
+
+        // 1. SMART LOOKUP: Try to find a Payment with this ID first
+        // (This fixes the "Order Not Found" bug because your URL has a Payment ID)
+        try {
+            const { payment } = await square.payments.get({ paymentId: lookupId });
+            if (payment) {
+                // Found it! Use the Order ID linked to this payment
+                if (payment.orderId) orderId = payment.orderId;
+                email = payment.buyerEmailAddress ?? null;
+                receiptUrl = payment.receiptUrl ?? null;
+            }
+        } catch (e) {
+            // If lookupId wasn't a valid Payment ID, we assume it's already an Order ID and proceed
+            console.log("ID provided is not a payment, trying as Order ID...");
+        }
+
+        // 2. Fetch the Order details using the correct Order ID
         const orderResponse = await square.orders.get({ orderId });
         if (!orderResponse.order) throw new Error("Order not found");
 
-        let receiptUrl = null;
-        let email = null; // 👈 Variable to store the email
-
-        const tender = orderResponse.order.tenders?.[0];
-
-        if (tender?.paymentId) {
-            const paymentResponse = await square.payments.get({ paymentId: tender.paymentId });
-
-            if (paymentResponse.payment) {
-                receiptUrl = paymentResponse.payment.receiptUrl;
-                email = paymentResponse.payment.buyerEmailAddress; // 👈 Capture the email
+        // 3. Fallback: If we didn't find the email/receipt in Step 1, try to find it via the Order's tenders
+        if (!email || !receiptUrl) {
+            const tender = orderResponse.order.tenders?.[0];
+            if (tender?.paymentId) {
+                try {
+                    const paymentResponse = await square.payments.get({ paymentId: tender.paymentId });
+                    if (paymentResponse.payment) {
+                        receiptUrl = paymentResponse.payment.receiptUrl ?? receiptUrl;
+                        email = paymentResponse.payment.buyerEmailAddress ?? email;
+                    }
+                } catch (err) {
+                    console.warn("Could not fetch linked payment details.");
+                }
             }
         }
 
+        // 4. Fetch Recommendations
         const recommendations = await client.fetch(`
       *[_type == "product"][0...4] {
         _id,
@@ -57,6 +80,7 @@ export async function getOrderDetails(orderId: string) {
       }
     `);
 
+        // 5. Serialize BigInts
         const order = JSON.parse(JSON.stringify(orderResponse.order, (key, value) =>
             typeof value === 'bigint' ? value.toString() : value
         ));
