@@ -91,13 +91,15 @@ export default function CheckoutClient({ recommendations, settings, paymentMetho
   const shipping = deliveryMethod === "ship" ? activeSettings.flatRateShipping : 0;
   const estimatedTax = subtotal * (activeSettings.taxRate / 100);
   const total = subtotal + shipping + estimatedTax;
+  const [email, setEmail] = useState("");
 
   // Validation: Button is only active if these pass
   const isFormValid = useMemo(() => {
     if (items.length === 0) return false;
+    if (!email || !email.includes("@")) return false; // 👈 Add this check
     if (deliveryMethod === "ship" && !selectedDate) return false;
     return true;
-  }, [items, deliveryMethod, selectedDate]);
+  }, [items, email, deliveryMethod, selectedDate]);
 
   const handlePlaceOrder = async () => {
     setIsProcessing(true);
@@ -115,7 +117,7 @@ export default function CheckoutClient({ recommendations, settings, paymentMetho
       const token = paymentResult.token!;
 
       // 2. Send Token to Server Action
-      const charge = await processSquarePayment(token, items);
+      const charge = await processSquarePayment(token, items, email);
 
       if (charge.success && charge.payment) { // FIX: Check if payment exists
         // Redirect to success page
@@ -149,6 +151,23 @@ export default function CheckoutClient({ recommendations, settings, paymentMetho
 
       <div className="flex flex-col lg:flex-row gap-12">
         <div className="flex-1 space-y-10">
+
+          {/* NEW: Contact Info Section */}
+          <section className="space-y-4">
+            <h2 className="text-xl font-bold text-white">Contact Info</h2>
+            <div className="bg-gray-900/50 border border-gray-800 p-6 rounded-2xl">
+              <Label htmlFor="email" className="text-gray-300 mb-2 block">Email Address (for receipt)</Label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="w-full bg-gray-950 border border-gray-800 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-600 outline-none"
+              />
+            </div>
+          </section>
+
           <section className="space-y-6">
             <h2 className="text-xl font-bold text-white">Delivery Options</h2>
             <RadioGroup
