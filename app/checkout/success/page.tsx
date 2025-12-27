@@ -3,11 +3,12 @@
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { CheckCircle, ArrowRight, Printer, Mail, HelpCircle } from "lucide-react";
+import { CheckCircle, ArrowRight, Printer, Mail, HelpCircle, Loader2 } from "lucide-react";
 import { useCartStore } from "@/store/cart-store";
 import { Button } from "@/components/ui/button";
 import { ProductCard } from "@/components/product-card";
-import { getOrderDetails } from "./actions";
+import { getOrderDetails } from "./actions"; // Your data fetcher
+import { sendReceiptEmail } from "@/app/actions/send-receipt"; // Your new Resend emailer
 
 function SuccessContent() {
     const searchParams = useSearchParams();
@@ -17,9 +18,15 @@ function SuccessContent() {
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
+    // State for the Custom Email Buttonsss
+    const [isSending, setIsSending] = useState(false);
+    const [emailSent, setEmailSent] = useState(false);
+
     useEffect(() => {
+        // 1. Clear cart immediately
         clearCart();
 
+        // 2. Fetch Order Data
         if (orderId) {
             getOrderDetails(orderId).then((res) => {
                 if (res.success) {
@@ -29,6 +36,22 @@ function SuccessContent() {
             });
         }
     }, [orderId, clearCart]);
+
+    // Handler for the "Email Me Receipt" button
+    const handleSendEmail = async () => {
+        if (!data?.order || !data?.email) return;
+
+        setIsSending(true);
+        // Call the Server Action you created with Resend
+        const result = await sendReceiptEmail(data.email, data.order);
+        setIsSending(false);
+
+        if (result.success) {
+            setEmailSent(true);
+        } else {
+            alert("Failed to send email. Please try again.");
+        }
+    };
 
     if (loading) {
         return <div className="text-center py-20 text-white animate-pulse">Loading receipt details...</div>;
@@ -43,15 +66,16 @@ function SuccessContent() {
         );
     }
 
-    const { order, recommendations, email } = data;
+    const { order, recommendations, receiptUrl, email } = data;
 
+    // Calculate totals safely
     const total = (Number(order.totalMoney?.amount || 0) / 100).toFixed(2);
     const tax = (Number(order.totalTaxMoney?.amount || 0) / 100).toFixed(2);
 
     return (
         <div className="min-h-screen py-12 space-y-12">
 
-            {/* HEADER */}
+            {/* HEADER SECTION */}
             <div className="flex flex-col items-center justify-center text-center space-y-6">
                 <div className="relative">
                     <div className="absolute inset-0 bg-green-500 blur-3xl opacity-20 rounded-full" />
@@ -61,12 +85,14 @@ function SuccessContent() {
                     <h1 className="text-4xl font-extrabold text-white mb-2">Order Confirmed!</h1>
                     <p className="text-gray-400 text-lg mb-2">Order #{order.id.slice(0, 8)}</p>
 
-                    {/* EMAIL CONFIRMATION BADGE */}
-                    {email && (
-                        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-blue-900/30 border border-blue-800 text-blue-200 text-sm font-medium">
+                    {/* Confirmation Badge */}
+                    {emailSent ? (
+                        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-blue-900/30 border border-blue-800 text-blue-200 text-sm font-medium animate-in fade-in zoom-in">
                             <Mail className="w-4 h-4" />
                             Receipt sent to {email}
                         </div>
+                    ) : (
+                        <p className="text-sm text-gray-500">Thank you for your purchase.</p>
                     )}
                 </div>
             </div>
@@ -78,6 +104,7 @@ function SuccessContent() {
                     <span className="text-sm text-gray-500">{new Date(order.createdAt).toLocaleDateString()}</span>
                 </div>
 
+                {/* Line Items */}
                 <div className="p-6 space-y-6">
                     <ul className="space-y-4">
                         {order.lineItems?.map((item: any, i: number) => (
@@ -95,6 +122,7 @@ function SuccessContent() {
 
                     <div className="border-t border-gray-800 my-4" />
 
+                    {/* Totals */}
                     <div className="space-y-2 text-right">
                         <div className="flex justify-between text-gray-500 text-sm">
                             <span>Tax</span>
@@ -111,39 +139,49 @@ function SuccessContent() {
                 <div className="p-6 bg-gray-950/50 border-t border-gray-800 flex flex-col gap-4">
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {/* 1. VIEW OFFICIAL RECEIPT (Fixed: Black Text on White) */}
-                        {data.receiptUrl && data.receiptUrl !== "#" ? (
+                        {/* 1. VIEW OFFICIAL RECEIPT (White Button) */}
+                        {receiptUrl && receiptUrl !== "#" ? (
                             <Button
                                 asChild
-                                className="w-full bg-white text-black hover:bg-gray-200 font-bold border-0"
+                                className="w-full bg-white text-black hover:bg-gray-200 font-bold border-0 h-12"
                             >
-                                <a href={data.receiptUrl} target="_blank" rel="noopener noreferrer">
+                                <a href={receiptUrl} target="_blank" rel="noopener noreferrer">
                                     <Printer className="w-4 h-4 mr-2" /> View Official Receipt
                                 </a>
                             </Button>
                         ) : (
-                            <Button
-                                disabled
-                                className="w-full bg-gray-800 text-gray-400 cursor-not-allowed border border-gray-700"
-                            >
-                                <Printer className="w-4 h-4 mr-2" /> Receipt Loading...
+                            <Button disabled className="w-full bg-gray-800 text-gray-400 border border-gray-700 h-12">
+                                <Printer className="w-4 h-4 mr-2" /> Receipt Unavailable
                             </Button>
                         )}
 
-                        {/* 2. CONTINUE SHOPPING */}
-                        <Button asChild className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold">
+                        {/* 2. CONTINUE SHOPPING (Blue Button) */}
+                        <Button asChild className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold h-12">
                             <Link href="/products">
                                 Shop Again <ArrowRight className="w-4 h-4 ml-2" />
                             </Link>
                         </Button>
                     </div>
 
-                    <div className="text-center">
-                        <Button
-                            asChild
-                            variant="link"
-                            className="text-gray-500 hover:text-white"
-                        >
+                    {/* 3. EMAIL ME BUTTON (Your Custom Resend Action) */}
+                    <Button
+                        onClick={handleSendEmail}
+                        disabled={isSending || emailSent || !email}
+                        variant="outline"
+                        className="w-full border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white h-12"
+                    >
+                        {isSending ? (
+                            <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sending Email...</>
+                        ) : emailSent ? (
+                            <><CheckCircle className="w-4 h-4 mr-2 text-green-500" /> Receipt Sent Successfully</>
+                        ) : (
+                            <><Mail className="w-4 h-4 mr-2" /> Email Me A Copy ({email || "No Email"})</>
+                        )}
+                    </Button>
+
+                    {/* Help Link */}
+                    <div className="text-center pt-2">
+                        <Button asChild variant="link" className="text-gray-500 hover:text-white">
                             <Link href="/contact">
                                 <HelpCircle className="w-4 h-4 mr-2" /> Need help with this order?
                             </Link>
@@ -153,7 +191,7 @@ function SuccessContent() {
                 </div>
             </div>
 
-            {/* RECOMMENDATIONS */}
+            {/* RECOMMENDATIONS SECTION */}
             {recommendations.length > 0 && (
                 <div className="border-t border-gray-800 pt-12">
                     <h2 className="text-2xl font-bold text-white mb-8 text-center">You Might Also Like</h2>
