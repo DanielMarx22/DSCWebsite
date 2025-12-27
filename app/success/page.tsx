@@ -18,7 +18,7 @@ function SuccessContent() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // State for the Custom Email Button
+  // State for the Custom Email Buttonsss
   const [isSending, setIsSending] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
 
