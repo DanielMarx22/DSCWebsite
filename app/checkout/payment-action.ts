@@ -2,27 +2,31 @@
 
 import { SquareClient, SquareEnvironment } from "square";
 import { randomUUID } from "crypto";
-import { createClient } from "next-sanity"; // 👈 Need this for the write client
-import { apiVersion, dataset, projectId } from "@/sanity/env"; // Adjust path if needed
+import { createClient } from "next-sanity";
+import { apiVersion, dataset, projectId } from "@/sanity/env";
 
-// 1. Setup Square
 const square = new SquareClient({
     token: process.env.SQUARE_ACCESS_TOKEN!,
     environment: SquareEnvironment.Production,
 });
 
-// 2. Setup Sanity Write Client (Needs the Token you just created)
 const sanityWrite = createClient({
     projectId,
     dataset,
     apiVersion,
-    useCdn: false, // Must be false for real-time updates
-    token: process.env.SANITY_API_TOKEN, // 👈 The token from Step 1
+    useCdn: false,
+    token: process.env.SANITY_API_TOKEN,
 });
 
-export async function processSquarePayment(token: string, cartItems: any[], email: string) {
+// 👇 Update signature to accept marketingConsent
+export async function processSquarePayment(
+    token: string,
+    cartItems: any[],
+    email: string,
+    marketingConsent: boolean
+) {
     try {
-        // --- STEP A: SQUARE CHARGE ---
+        // 1. Create Line Items
         const lineItems = cartItems.map((item) => ({
             name: item.name,
             quantity: item.quantity.toString(),
@@ -32,6 +36,7 @@ export async function processSquarePayment(token: string, cartItems: any[], emai
             },
         }));
 
+        // 2. Create Order
         const orderResponse = await square.orders.create({
             order: {
                 locationId: process.env.NEXT_PUBLIC_SQUARE_LOCATION_ID!,
@@ -42,6 +47,8 @@ export async function processSquarePayment(token: string, cartItems: any[], emai
 
         if (!orderResponse.order?.id) throw new Error("Failed to create order.");
 
+        // 3. Process Payment (Receipt Logic)
+        // We ALWAYS send the email to Square so they get the receipt
         const paymentResponse = await square.payments.create({
             sourceId: token,
             idempotencyKey: randomUUID(),
@@ -50,20 +57,30 @@ export async function processSquarePayment(token: string, cartItems: any[], emai
                 currency: "USD" as const,
             },
             orderId: orderResponse.order.id,
-            buyerEmailAddress: email, // 👈 SQUARE WILL NOW SEND THE RECEIPT
+            buyerEmailAddress: email,
         });
 
-        // --- STEP B: SANITY INVENTORY UPDATE ---
-        // We loop through items and tell Sanity to subtract the quantity
-        // We use Promise.all to do them all at once safely
-        await Promise.all(cartItems.map(item =>
-            sanityWrite
-                .patch(item.id) // Find product by ID
-                .dec({ inventory: item.quantity }) // Subtract sold quantity
-                .commit() // Save
-        ));
+        // 4. Update Inventory & Handle Marketing (Parallel)
+        // We use Promise.allSettled so if marketing fails, it doesn't crash the order
+        await Promise.allSettled([
+            // A. Decrement Inventory
+            ...cartItems.map(item =>
+                sanityWrite
+                    .patch(item.id)
+                    .dec({ inventory: item.quantity })
+                    .commit()
+            ),
 
-        // Handle BigInt serialization
+            // B. MARKETING LOGIC (Only if they opted in) 👈
+            marketingConsent
+                ? sanityWrite.create({
+                    _type: 'subscriber',
+                    email: email,
+                    joinedAt: new Date().toISOString()
+                })
+                : Promise.resolve()
+        ]);
+
         const paymentResult = JSON.parse(JSON.stringify(paymentResponse.payment, (key, value) =>
             typeof value === 'bigint' ? value.toString() : value
         ));
@@ -71,7 +88,7 @@ export async function processSquarePayment(token: string, cartItems: any[], emai
         return { success: true, payment: paymentResult };
 
     } catch (error: any) {
-        console.error("Payment/Inventory Error:", error);
+        console.error("Payment Error:", error);
         const errorMessage = error.errors ? error.errors[0].detail : error.message;
         return { success: false, error: errorMessage };
     }

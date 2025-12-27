@@ -14,6 +14,7 @@ import { addDays, format, parseISO, isBefore, setHours, setMinutes, isSameDay } 
 import "react-day-picker/dist/style.css";
 import PaymentForm, { PaymentFormHandle } from "@/components/payment-form";
 import { processSquarePayment } from "@/app/checkout/payment-action";
+import { Checkbox } from "@/components/ui/checkbox"; // Assuming you have shadcn, or use standard input
 
 interface CheckoutSettings {
   allowedShippingDays: string[];
@@ -92,6 +93,7 @@ export default function CheckoutClient({ recommendations, settings, paymentMetho
   const estimatedTax = subtotal * (activeSettings.taxRate / 100);
   const total = subtotal + shipping + estimatedTax;
   const [email, setEmail] = useState("");
+  const [marketingConsent, setMarketingConsent] = useState(false);
 
   // Validation: Button is only active if these pass
   const isFormValid = useMemo(() => {
@@ -117,7 +119,8 @@ export default function CheckoutClient({ recommendations, settings, paymentMetho
       const token = paymentResult.token!;
 
       // 2. Send Token to Server Action
-      const charge = await processSquarePayment(token, items, email);
+      // Pass the new boolean to the server action
+      const charge = await processSquarePayment(token, items, email, marketingConsent); // 👈 Pass consent
 
       if (charge.success && charge.payment) { // FIX: Check if payment exists
         // Redirect to success page
@@ -155,16 +158,39 @@ export default function CheckoutClient({ recommendations, settings, paymentMetho
           {/* NEW: Contact Info Section */}
           <section className="space-y-4">
             <h2 className="text-xl font-bold text-white">Contact Info</h2>
-            <div className="bg-gray-900/50 border border-gray-800 p-6 rounded-2xl">
-              <Label htmlFor="email" className="text-gray-300 mb-2 block">Email Address (for receipt)</Label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="w-full bg-gray-950 border border-gray-800 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-600 outline-none"
-              />
+            <div className="bg-gray-900/50 border border-gray-800 p-6 rounded-2xl space-y-4">
+              <div>
+                <Label htmlFor="email" className="text-gray-300 mb-2 block">Email Address (for receipt)</Label>
+                <input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  className="w-full bg-gray-950 border border-gray-800 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-600 outline-none"
+                />
+              </div>
+
+              {/* 👇 NEW: Marketing Checkbox */}
+              <div className="flex items-start space-x-3 pt-2">
+                <div className="flex items-center h-6">
+                  <input
+                    id="marketing"
+                    type="checkbox"
+                    checked={marketingConsent}
+                    onChange={(e) => setMarketingConsent(e.target.checked)}
+                    className="w-5 h-5 rounded border-gray-700 bg-gray-950 text-blue-600 focus:ring-blue-500 focus:ring-offset-gray-900"
+                  />
+                </div>
+                <div className="text-sm">
+                  <label htmlFor="marketing" className="font-medium text-gray-300 cursor-pointer select-none">
+                    Keep me updated on new arrivals and exclusive offers
+                  </label>
+                  <p className="text-gray-500 text-xs mt-1">
+                    We promise not to spam. You can unsubscribe at any time.
+                  </p>
+                </div>
+              </div>
             </div>
           </section>
 
