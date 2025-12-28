@@ -3,8 +3,10 @@
 import { visionTool } from "@sanity/vision";
 import { defineConfig } from "sanity";
 import { structureTool } from "sanity/structure";
+import { dashboardTool } from "@sanity/dashboard"; // 1. Import Dashboard Tool
 import { apiVersion, dataset, projectId } from "./sanity/env";
 import { schema } from "./sanity/schemaTypes";
+import { SyncSquareWidget } from "./sanity/components/SyncSquareWidget"; // 2. Import your Widget
 
 export default defineConfig({
   basePath: "/studio",
@@ -17,26 +19,38 @@ export default defineConfig({
         S.list()
           .title("Content")
           .items([
-            // 1. Create a dedicated "Singleton" link for Checkout Settings
+            // Singleton: Checkout Settings
             S.listItem()
               .title("Checkout Settings")
               .id("checkoutSettings")
               .child(
                 S.document()
                   .schemaType("checkoutSettings")
-                  .documentId("checkoutSettings") // Forces a constant ID
+                  .documentId("checkoutSettings")
               ),
             S.divider(),
-            // 2. Automatically list all other document types (Products, etc.)
-            // but hide 'checkoutSettings' from this general list
+            // Everything else (Products, Categories, etc.)
             ...S.documentTypeListItems().filter(
               (item) => item.getId() !== "checkoutSettings"
             ),
           ]),
     }),
+
+    // 3. Add the Dashboard Plugin here
+    dashboardTool({
+      widgets: [
+        {
+          name: 'sync-square',
+          component: SyncSquareWidget,
+          layout: { width: 'medium' }
+        }
+      ]
+    }),
+
     visionTool({ defaultApiVersion: apiVersion }),
   ],
-  // 3. Prevent the "New Document" menu from showing Checkout Settings
+
+  // Document Actions (Prevent Deleting Singleton)
   document: {
     newDocumentOptions: (prev, { creationContext }) => {
       if (creationContext.type === "global") {
@@ -44,7 +58,6 @@ export default defineConfig({
       }
       return prev;
     },
-    // Prevent deleting the settings document
     actions: (prev, { schemaType }) => {
       if (schemaType === "checkoutSettings") {
         return prev.filter((action) => action.action !== "delete" && action.action !== "duplicate");
