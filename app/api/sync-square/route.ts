@@ -31,95 +31,81 @@ export async function GET(request: Request) {
     }
 
     try {
-        console.log("🚀 Starting Full Catalog Sync (Direct API Mode)...");
+        console.log("🚀 Starting Smart Sync (Preserving Sanity Data)...");
 
+        // --- STEP 1: Fetch All Square Items ---
         let allItems: any[] = [];
         let cursor: string | null = null;
         let pageCount = 0;
 
-        // --- PAGINATION LOOP (Using Direct Fetch) ---
         do {
             pageCount++;
-            // Build URL manually to guarantee we get the raw cursor
             let url = `https://connect.squareup.com/v2/catalog/list?types=ITEM`;
-            if (cursor) {
-                url += `&cursor=${cursor}`;
-            }
-
-            console.log(`   Fetching Page ${pageCount}...`);
+            if (cursor) url += `&cursor=${cursor}`;
 
             const res = await fetch(url, {
                 headers: {
                     'Authorization': `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`,
                     'Content-Type': 'application/json'
                 },
-                cache: 'no-store' // Don't use Next.js cache
+                cache: 'no-store'
             });
 
-            if (!res.ok) {
-                throw new Error(`Square API Error: ${res.status} ${res.statusText}`);
-            }
-
             const data = await res.json();
-
-            if (data.objects && data.objects.length > 0) {
-                allItems = [...allItems, ...data.objects];
-                console.log(`     -> Found ${data.objects.length} items.`);
-            }
-
-            // The Raw API puts 'cursor' at the very top level. Impossible to miss.
+            if (data.objects) allItems = [...allItems, ...data.objects];
             cursor = data.cursor || null;
 
         } while (cursor);
 
-        if (allItems.length === 0) {
-            return NextResponse.json({ message: "No products found in Square." });
-        }
+        if (allItems.length === 0) return NextResponse.json({ message: "No products in Square." });
 
-        console.log(`📦 Found ${allItems.length} total products. Syncing to Sanity...`);
+        console.log(`📦 Fetched ${allItems.length} items from Square.`);
+
+        // --- STEP 2: Fetch Existing Sanity Data (To Preserve It) ---
+        // We fetch the fields we want to KEEP: category, tags, description, inventory
+        const existingSanityItems = await sanity.fetch(
+            `*[_type == "product"]{ _id, category, tags, description, inventory }`
+        );
+
+        // Create a fast lookup map: "square-123" -> { category: ..., description: ... }
+        const existingMap = new Map(existingSanityItems.map((i: any) => [i._id, i]));
+
         let syncedCount = 0;
 
-        // --- SYNC LOOP ---
+        // --- STEP 3: The Merge Loop ---
         for (const item of allItems) {
-            // NOTE: Raw API uses snake_case (item_data), not camelCase (itemData)
+            // Square Data (The "New" Stuff)
             if (!item.item_data) continue;
-
             const squareId = item.id;
-            const name = item.item_data.name || "Untitled";
-            const description = item.item_data.description || "";
+            const sanityId = `square-${squareId}`;
 
-            // Price Logic (snake_case)
+            const squareName = item.item_data.name || "Untitled";
+            const squareDesc = item.item_data.description || "";
+
             const variation = item.item_data.variations?.[0];
             const moneyAmount = variation?.item_variation_data?.price_money?.amount;
             const priceVal = Number(moneyAmount || 0) / 100;
+            const slug = slugify(squareName, { lower: true, strict: true });
 
-            const slug = slugify(name, { lower: true, strict: true });
+            // Check what we already have in Sanity
+            const oldData = existingMap.get(sanityId);
 
-            // Handle Image
+            // --- IMAGE SYNC (Standard) ---
             let imageAsset = null;
             if (item.item_data.image_ids && item.item_data.image_ids.length > 0) {
                 try {
-                    // We can still use the SDK here for convenience, or switch to fetch if needed.
-                    // The SDK is fine for single object retrieval.
                     const imageId = item.item_data.image_ids[0];
-
-                    // Using SDK for image details (It converts to camelCase)
                     const imgRes = await square.catalog.object.retrieve(imageId) as any;
-
-                    // Reliable image extraction
                     let imgObj = imgRes.data?.object || imgRes.data || imgRes.object;
-
-                    // Fallback parsing if needed
                     if (!imgObj && imgRes.body) {
                         try {
                             const b = typeof imgRes.body === 'string' ? JSON.parse(imgRes.body) : imgRes.body;
                             imgObj = b.object;
                         } catch (e) { }
                     }
-
                     const imgUrl = imgObj?.imageData?.url;
-
                     if (imgUrl) {
+                        // Only download/upload if we really need to (optimization optional, but safer to re-sync for now)
                         const res = await fetch(imgUrl);
                         const buffer = await res.arrayBuffer();
                         const asset = await sanity.assets.upload("image", Buffer.from(buffer), {
@@ -127,21 +113,40 @@ export async function GET(request: Request) {
                         });
                         imageAsset = { _type: "image", asset: { _ref: asset._id } };
                     }
-                } catch (err) {
-                    console.warn(`   Could not fetch image for ${name}`);
-                }
+                } catch (err) { /* Skip image error */ }
             }
 
-            const sanityDoc = {
-                _id: `square-${squareId}`,
+            // --- THE MERGE LOGIC ---
+
+            // 1. Description: Use Sanity's if exists, otherwise Square's
+            let finalDescription = createBlockContent(squareDesc); // Default to Square
+            if (oldData && oldData.description) {
+                finalDescription = oldData.description; // Keep Sanity's custom description
+            }
+
+            // 2. Inventory: Keep Sanity's count if exists, otherwise 0
+            let finalInventory = 0;
+            if (oldData && oldData.inventory !== undefined) {
+                finalInventory = oldData.inventory;
+            }
+
+            // 3. Build the "Merged" Document
+            const sanityDoc: any = {
+                _id: sanityId,
                 _type: "product",
-                title: name,
+                title: squareName,              // Always update Name from Square
                 slug: { _type: "slug", current: slug },
-                price: priceVal,
-                description: createBlockContent(description),
-                inventory: 0,
-                ...(imageAsset && { images: [imageAsset] }),
+                price: priceVal,                // Always update Price from Square
+                description: finalDescription,  // Smart Merge
+                inventory: finalInventory,      // Smart Merge
+                ...(imageAsset && { images: [imageAsset] }), // Update Image
             };
+
+            // 4. Preserve Category & Tags
+            if (oldData) {
+                if (oldData.category) sanityDoc.category = oldData.category;
+                if (oldData.tags) sanityDoc.tags = oldData.tags;
+            }
 
             await sanity.createOrReplace(sanityDoc);
             syncedCount++;
@@ -149,7 +154,7 @@ export async function GET(request: Request) {
 
         return NextResponse.json({
             success: true,
-            message: `Successfully synced ${syncedCount} products from ${pageCount} pages.`
+            message: `Successfully synced ${syncedCount} products. Preserved categories, tags, and custom descriptions.`
         });
 
     } catch (error: any) {
