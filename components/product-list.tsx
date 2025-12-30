@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useRouter, useSearchParams } from "next/navigation"; // 👈 Added for URL control
 import { ProductCard } from "@/components/product-card";
 import { SlidersHorizontal, X, ChevronDown, ChevronUp } from "lucide-react";
 
@@ -20,7 +21,7 @@ interface ProductListProps {
   products: Product[];
 }
 
-// --- HELPER COMPONENT: COLLAPSIBLE FILTER SECTION ---
+// --- HELPER: COLLAPSIBLE FILTER SECTION ---
 function FilterSection({ title, options, selected, onToggle }: any) {
   const [isExpanded, setIsExpanded] = useState(false);
   const limit = 5;
@@ -47,7 +48,7 @@ function FilterSection({ title, options, selected, onToggle }: any) {
           </label>
         ))}
       </div>
-      
+
       {options.length > limit && (
         <button
           onClick={() => setIsExpanded(!isExpanded)}
@@ -66,38 +67,65 @@ function FilterSection({ title, options, selected, onToggle }: any) {
 
 // --- MAIN COMPONENT ---
 export function ProductList({ products }: ProductListProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // 1. URL STATE (Server Side Filter)
+  const showAll = searchParams.get("showAll") === "true"; // True = Show Out of Stock
+
+  // 2. LOCAL STATE (Client Side Filters)
   const [sortOption, setSortOption] = useState("newest");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
-  
   const [priceRange, setPriceRange] = useState<{ min: string; max: string }>({ min: "", max: "" });
-  const [stockStatus, setStockStatus] = useState<string[]>(["in"]); 
 
-  // 1. CALCULATE MAX PRICE (The Ceiling)
+  // 3. HANDLE STOCK TOGGLE (Updates URL)
+  const toggleStock = (type: "in" | "out") => {
+    const params = new URLSearchParams(searchParams.toString());
+
+    if (type === "out") {
+      // Toggle "Out of Stock"
+      if (showAll) {
+        params.delete("showAll"); // Turn OFF (Back to In Stock Only)
+      } else {
+        params.set("showAll", "true"); // Turn ON
+      }
+    } else {
+      // Clicked "In Stock" -> Force "Show All" to false (Reset to default)
+      params.delete("showAll");
+    }
+
+    // Reset to page 1 to avoid empty page bugs
+    params.set("page", "1");
+
+    // Soft Refresh
+    router.push(`?${params.toString()}`, { scroll: false });
+  };
+
+  // 4. CALCULATE MAX PRICE
   const maxProductPrice = useMemo(() => {
     if (products.length === 0) return 0;
-    // Returns the highest price found in the product list
     return Math.max(...products.map(p => p.price));
   }, [products]);
 
-  // 2. INPUT AUTO-CORRECTION LOGIC
+  // 5. PRICE INPUT HANDLERS
   const handleMinBlur = () => {
     if (priceRange.min === "") return;
     let val = parseFloat(priceRange.min);
-    if (val < 0) val = 0; // Fix Negative
-    if (val > maxProductPrice) val = maxProductPrice; // Fix over Max
+    if (val < 0) val = 0;
+    if (val > maxProductPrice) val = maxProductPrice;
     setPriceRange(prev => ({ ...prev, min: val.toString() }));
   };
 
   const handleMaxBlur = () => {
     if (priceRange.max === "") return;
     let val = parseFloat(priceRange.max);
-    if (val < 0) val = 0; // Fix Negative
-    if (val > maxProductPrice) val = maxProductPrice; // Fix massive numbers
+    if (val < 0) val = 0;
+    if (val > maxProductPrice) val = maxProductPrice;
     setPriceRange(prev => ({ ...prev, max: val.toString() }));
   };
 
-  // 3. EXTRACT TAGS
+  // 6. EXTRACT TAGS
   const tagGroups = useMemo(() => {
     const groups: Record<string, Set<string>> = {
       fish: new Set(),
@@ -125,7 +153,8 @@ export function ProductList({ products }: ProductListProps) {
     return categoriesInView;
   }, [products]);
 
-  // 4. MASTER FILTER LOGIC
+  // 7. CLIENT SIDE FILTERING (Tags & Price Only)
+  // Note: We do NOT filter stock here anymore. We trust the Server.
   const filteredProducts = useMemo(() => {
     let result = [...products];
 
@@ -144,43 +173,25 @@ export function ProductList({ products }: ProductListProps) {
       result = result.filter((p) => (p.price || 0) <= Number(priceRange.max));
     }
 
-    // C. Filter by Stock
-    if (stockStatus.length > 0) {
-      result = result.filter((p) => {
-        const stockCount = p.inventory ?? 0;
-        const isInStock = stockCount > 0;
-
-        if (stockStatus.includes("in") && isInStock) return true;
-        if (stockStatus.includes("out") && !isInStock) return true;
-        
-        return false;
-      });
-    }
-
-    // D. Sort Logic
+    // C. Sort Logic
     result.sort((a, b) => {
+      // Always put In-Stock items first
       const stockA = (a.inventory || 0) > 0 ? 1 : 0;
       const stockB = (b.inventory || 0) > 0 ? 1 : 0;
 
-      if (stockA !== stockB) {
-        return stockB - stockA; 
-      }
+      if (stockA !== stockB) return stockB - stockA;
 
       switch (sortOption) {
-        case "price-asc":
-          return (a.price || 0) - (b.price || 0);
-        case "price-desc":
-          return (b.price || 0) - (a.price || 0);
-        case "alpha":
-          return a.name.localeCompare(b.name);
-        default: 
-          return 0;
+        case "price-asc": return (a.price || 0) - (b.price || 0);
+        case "price-desc": return (b.price || 0) - (a.price || 0);
+        case "alpha": return a.name.localeCompare(b.name);
+        default: return 0;
       }
     });
 
     return result;
 
-  }, [products, sortOption, selectedTags, priceRange, stockStatus]);
+  }, [products, sortOption, selectedTags, priceRange]);
 
   const toggleTag = (tag: string) => {
     setSelectedTags((prev) =>
@@ -188,111 +199,92 @@ export function ProductList({ products }: ProductListProps) {
     );
   };
 
-  const toggleStock = (status: string) => {
-    setStockStatus((prev) => 
-      prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]
-    );
-  };
-
   return (
     <div className="flex flex-col md:flex-row gap-8 pt-6">
-      
+
       {/* --- SIDEBAR --- */}
       <aside className={`
         fixed md:relative inset-0 z-50 bg-white md:bg-transparent p-6 md:p-0 overflow-y-auto md:overflow-visible transition-transform duration-300 w-full md:w-64 flex-shrink-0
         ${showMobileFilters ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
       `}>
         <div className="flex justify-between items-center md:hidden mb-6">
-            <h3 className="font-bold text-xl">Filters</h3>
-            <button onClick={() => setShowMobileFilters(false)}>
-                <X className="w-6 h-6" />
-            </button>
+          <h3 className="font-bold text-xl">Filters</h3>
+          <button onClick={() => setShowMobileFilters(false)}>
+            <X className="w-6 h-6" />
+          </button>
         </div>
 
-        {/* 1. PRICE FILTER (Updated Inputs) */}
+        {/* 1. PRICE FILTER */}
         <div className="border-b border-gray-200 pb-6 md:pt-0">
-            <div className="flex justify-between items-end mb-4">
-               <h3 className="font-bold text-lg">Price</h3>
-               <span className="text-xs text-gray-400">Max: ${maxProductPrice}</span>
-            </div>
-            
-            <div className="flex items-center gap-2">
-                <div className="relative">
-                    <span className="absolute left-3 top-2 text-gray-500">$</span>
-                    <input 
-                        type="number" 
-                        min="0"
-                        placeholder="0" 
-                        value={priceRange.min}
-                        onChange={(e) => setPriceRange(prev => ({ ...prev, min: e.target.value }))}
-                        onBlur={handleMinBlur} // 👈 Snap to 0 if negative
-                        className="w-full pl-6 pr-2 py-2 border rounded-md text-sm bg-white text-black"
-                    />
-                </div>
-                <span className="text-gray-400">-</span>
-                <div className="relative">
-                    <span className="absolute left-3 top-2 text-gray-500">$</span>
-                    <input 
-                        type="number" 
-                        min="0"
-                        max={maxProductPrice} // 👈 Browser Hint
-                        placeholder={`${maxProductPrice}`} 
-                        value={priceRange.max}
-                        onChange={(e) => setPriceRange(prev => ({ ...prev, max: e.target.value }))}
-                        onBlur={handleMaxBlur} // 👈 Snap to Max Price if over
-                        className="w-full pl-6 pr-2 py-2 border rounded-md text-sm bg-white text-black"
-                    />
-                </div>
-            </div>
+          <div className="flex justify-between items-end mb-4">
+            <h3 className="font-bold text-lg">Price</h3>
+            <span className="text-xs text-gray-400">Max: ${maxProductPrice}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="number" min="0" placeholder="0"
+              value={priceRange.min}
+              onChange={(e) => setPriceRange(prev => ({ ...prev, min: e.target.value }))}
+              onBlur={handleMinBlur}
+              className="w-full pl-6 pr-2 py-2 border rounded-md text-sm bg-white text-black"
+            />
+            <span className="text-gray-400">-</span>
+            <input
+              type="number" min="0" max={maxProductPrice} placeholder={`${maxProductPrice}`}
+              value={priceRange.max}
+              onChange={(e) => setPriceRange(prev => ({ ...prev, max: e.target.value }))}
+              onBlur={handleMaxBlur}
+              className="w-full pl-6 pr-2 py-2 border rounded-md text-sm bg-white text-black"
+            />
+          </div>
         </div>
 
-        {/* 2. AVAILABILITY FILTER */}
+        {/* 2. AVAILABILITY FILTER (Restored!) */}
         <div className="border-b border-gray-200 py-6">
-            <h3 className="font-bold text-lg mb-4">Availability</h3>
-            <div className="space-y-3">
-                <label className="flex items-center space-x-2 cursor-pointer">
-                    <input 
-                        type="checkbox" 
-                        checked={stockStatus.includes("in")} 
-                        onChange={() => toggleStock("in")}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4" 
-                    />
-                    <span className="text-sm text-gray-700">In Stock</span>
-                </label>
-                <label className="flex items-center space-x-2 cursor-pointer">
-                    <input 
-                        type="checkbox" 
-                        checked={stockStatus.includes("out")} 
-                        onChange={() => toggleStock("out")}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4" 
-                    />
-                    <span className="text-sm text-gray-700">Out of Stock</span>
-                </label>
-            </div>
+          <h3 className="font-bold text-lg mb-4">Availability</h3>
+          <div className="space-y-3">
+            <label className="flex items-center space-x-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={true} // Always checked visually to show "In Stock" is active
+                onChange={() => toggleStock("in")}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
+              />
+              <span className="text-sm text-gray-700">In Stock</span>
+            </label>
+            <label className="flex items-center space-x-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={showAll} // Only checked if URL has ?showAll=true
+                onChange={() => toggleStock("out")}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
+              />
+              <span className="text-sm text-gray-700">Out of Stock</span>
+            </label>
+          </div>
         </div>
 
-        {/* 3. DYNAMIC CATEGORY TAGS */}
+        {/* 3. TAGS */}
         {activeCategories.has('fish') && tagGroups.fish.length > 0 && (
-            <FilterSection title="Fish Type" options={tagGroups.fish} selected={selectedTags} onToggle={toggleTag} />
+          <FilterSection title="Fish Type" options={tagGroups.fish} selected={selectedTags} onToggle={toggleTag} />
         )}
         {activeCategories.has('corals') && tagGroups.corals.length > 0 && (
-            <FilterSection title="Coral Type" options={tagGroups.corals} selected={selectedTags} onToggle={toggleTag} />
+          <FilterSection title="Coral Type" options={tagGroups.corals} selected={selectedTags} onToggle={toggleTag} />
         )}
         {activeCategories.has('inverts') && tagGroups.inverts.length > 0 && (
-            <FilterSection title="Invert Type" options={tagGroups.inverts} selected={selectedTags} onToggle={toggleTag} />
+          <FilterSection title="Invert Type" options={tagGroups.inverts} selected={selectedTags} onToggle={toggleTag} />
         )}
         {activeCategories.has('supplies') && tagGroups.supplies.length > 0 && (
-            <FilterSection title="Supply Type" options={tagGroups.supplies} selected={selectedTags} onToggle={toggleTag} />
+          <FilterSection title="Supply Type" options={tagGroups.supplies} selected={selectedTags} onToggle={toggleTag} />
         )}
 
-        {/* Mobile Filter Apply */}
         <div className="md:hidden mt-8">
-            <button 
-                onClick={() => setShowMobileFilters(false)}
-                className="w-full bg-black text-white py-3 rounded-lg font-bold"
-            >
-                Show {filteredProducts.length} Results
-            </button>
+          <button
+            onClick={() => setShowMobileFilters(false)}
+            className="w-full bg-black text-white py-3 rounded-lg font-bold"
+          >
+            Show {filteredProducts.length} Results
+          </button>
         </div>
       </aside>
 
@@ -304,11 +296,11 @@ export function ProductList({ products }: ProductListProps) {
           </span>
 
           <div className="flex gap-2 w-full sm:w-auto">
-            <button 
-                onClick={() => setShowMobileFilters(true)}
-                className="md:hidden flex items-center justify-center px-4 py-2 border border-gray-300 bg-white text-black rounded-md text-sm font-bold flex-1"
+            <button
+              onClick={() => setShowMobileFilters(true)}
+              className="md:hidden flex items-center justify-center px-4 py-2 border border-gray-300 bg-white text-black rounded-md text-sm font-bold flex-1"
             >
-                <SlidersHorizontal className="w-4 h-4 mr-2" /> Filters
+              <SlidersHorizontal className="w-4 h-4 mr-2" /> Filters
             </button>
 
             <select
@@ -329,21 +321,24 @@ export function ProductList({ products }: ProductListProps) {
             <ProductCard key={product._id} data={product} />
           ))}
         </div>
-        
+
         {filteredProducts.length === 0 && (
-            <div className="py-20 text-center text-gray-500 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-                <p className="text-lg mb-2">No products match your filters.</p>
-                <button 
-                    onClick={() => {
-                        setSelectedTags([]);
-                        setPriceRange({ min: "", max: "" });
-                        setStockStatus(["in"]);
-                    }}
-                    className="text-blue-600 font-bold hover:underline"
-                >
-                    Clear all filters
-                </button>
-            </div>
+          <div className="py-20 text-center text-gray-500 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+            <p className="text-lg mb-2">No products match your filters.</p>
+            <button
+              onClick={() => {
+                setSelectedTags([]);
+                setPriceRange({ min: "", max: "" });
+                // Also reset URL stock filter
+                const params = new URLSearchParams(searchParams.toString());
+                params.delete("showAll");
+                router.push(`?${params.toString()}`);
+              }}
+              className="text-blue-600 font-bold hover:underline"
+            >
+              Clear all filters
+            </button>
+          </div>
         )}
       </div>
     </div>
