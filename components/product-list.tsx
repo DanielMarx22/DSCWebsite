@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ProductCard } from "@/components/product-card";
 import { SlidersHorizontal, X, ChevronDown, ChevronUp } from "lucide-react";
@@ -141,6 +141,17 @@ export function ProductList({ products, emptyMessage }: ProductListProps) {
       inverts: Array.from(groups.inverts).sort(),
       supplies: Array.from(groups.supplies).sort(),
     };
+  }, [products]);
+
+  // This cleans up "Ghost Filters" when the product list changes
+  useEffect(() => {
+    // 1. Get a list of ALL currently valid tags from the new products
+    const allValidTags = new Set<string>();
+    products.forEach(p => p.tags?.forEach(t => allValidTags.add(t)));
+
+    // 2. Remove any selected tags that are no longer valid
+    setSelectedTags(prev => prev.filter(tag => allValidTags.has(tag)));
+
   }, [products]);
 
   const activeCategories = useMemo(() => {
