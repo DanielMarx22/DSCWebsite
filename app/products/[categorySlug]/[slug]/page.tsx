@@ -2,7 +2,16 @@ import { client } from "@/sanity/lib/client";
 import { notFound } from "next/navigation";
 import Image from "next/image";
 import { PortableText } from "@portabletext/react";
-import ProductControls from "@/components/product-controls"; // 👈 Import new component
+import ProductControls from "@/components/product-controls";
+import { calculateSalePrice, Sale } from "@/lib/sale-utils";
+
+// ✅ GLOBAL CURRENCY FORMATTER
+const formatMoney = (amount: number) => {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(amount);
+};
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -11,32 +20,30 @@ interface PageProps {
 export default async function ProductPage({ params }: PageProps) {
   const { slug } = await params;
 
-  const product = await client.fetch(`
-  *[_type == "product" && slug.current == $slug][0] {
-    _id,
-    "name": title,
-    "slug": slug.current,
-    description,
-    "imageUrl": images[0].asset->url,
-    price,
-    inventory,
-    // Try to get category slug from a reference OR a direct field
-    "category": coalesce(category->slug.current, categorySlug, "uncategorized")
-  }
-`, { slug });
+  const productQuery = `
+    *[_type == "product" && slug.current == $slug][0] {
+      _id,
+      "name": title,
+      "slug": slug.current,
+      description,
+      "imageUrl": images[0].asset->url,
+      price,
+      inventory,
+      "category": coalesce(category->slug.current, categorySlug, "uncategorized"),
+      tags 
+    }
+  `;
 
-  // DEBUG: This will show up in your VS Code terminal
-  console.log("--- SERVER SIDE PRODUCT CHECK ---");
-  console.log("ID:", product?._id);
-  console.log("Slug:", product?.slug);
-  console.log("Category Result:", product?.category);
-  console.log("---------------------------------");
+  const salesQuery = `*[_type == "sale" && isActive == true]`;
+
+  const [product, sales] = await Promise.all([
+    client.fetch(productQuery, { slug }, { next: { revalidate: 0 } }),
+    client.fetch<Sale[]>(salesQuery, {}, { next: { revalidate: 0 } })
+  ]);
 
   if (!product) return notFound();
 
-  if (!product) {
-    return notFound();
-  }
+  const { salePrice, originalPrice, isOnSale } = calculateSalePrice(product, sales);
 
   return (
     <div className="container mx-auto px-4 py-12 text-white">
@@ -55,34 +62,50 @@ export default async function ProductPage({ params }: PageProps) {
           ) : (
             <div className="flex h-full items-center justify-center text-gray-500">No Image</div>
           )}
+
+          {isOnSale && (product.inventory || 0) > 0 && (
+            <div className="absolute top-4 right-4 bg-green-600 text-white font-bold px-3 py-1 rounded shadow-lg z-10">
+              SALE
+            </div>
+          )}
         </div>
 
         {/* RIGHT: DETAILS */}
         <div>
-          {/* Title */}
           <h1 className="text-4xl font-extrabold mb-2">{product.name}</h1>
 
-          {/* Price */}
-          <p className="text-2xl text-gray-300 font-medium mb-4">
-            ${product.price ? product.price.toFixed(2) : "0.00"} USD
-          </p>
+          {/* 🏷️ FIXED PRICE DISPLAY */}
+          <div className="mb-4">
+            {isOnSale ? (
+              <div className="flex items-center gap-3">
+                <span className="text-3xl font-bold text-green-400">
+                  {formatMoney(salePrice)}
+                </span>
+                <span className="text-xl text-gray-500 line-through">
+                  {formatMoney(originalPrice)}
+                </span>
+              </div>
+            ) : (
+              <p className="text-2xl text-gray-300 font-medium">
+                {product.price ? formatMoney(product.price) : "Price Unavailable"}
+              </p>
+            )}
+          </div>
 
-          {/* Controls (Stock badge + Buttons) */}
           <ProductControls
             product={{
               id: product._id,
               name: product.name,
-              price: product.price || 0,
+              price: salePrice,
               imageUrl: product.imageUrl,
               maxQuantity: product.inventory || 0,
-              slug: product.slug,      // 👈 Added this
-              category: product.category // 👈 Added this
+              slug: product.slug,
+              category: product.category
             }}
           />
 
           <hr className="border-gray-800 my-6" />
 
-          {/* Care Guide / Description */}
           <h3 className="text-xl font-bold mb-3">Care Guide</h3>
           <div className="prose prose-invert max-w-none text-gray-300">
             {product.description ? (

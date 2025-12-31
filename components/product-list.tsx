@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ProductCard } from "@/components/product-card";
 import { SlidersHorizontal, X, ChevronDown, ChevronUp } from "lucide-react";
+import { Sale } from "@/lib/sale-utils"; // 👈 1. IMPORT SALE TYPE
 
 // --- TYPES ---
 type Product = {
@@ -19,7 +20,8 @@ type Product = {
 
 interface ProductListProps {
   products: Product[];
-  emptyMessage?: string; // 👈 NEW PROP
+  sales?: Sale[]; // 👈 2. ADD SALES PROP
+  emptyMessage?: string;
 }
 
 // --- HELPER: COLLAPSIBLE FILTER SECTION ---
@@ -67,7 +69,7 @@ function FilterSection({ title, options, selected, onToggle }: any) {
 }
 
 // --- MAIN COMPONENT ---
-export function ProductList({ products, emptyMessage }: ProductListProps) {
+export function ProductList({ products, sales, emptyMessage }: ProductListProps) { // 👈 3. DESTRUCTURE SALES
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -143,23 +145,21 @@ export function ProductList({ products, emptyMessage }: ProductListProps) {
     };
   }, [products]);
 
-  // This cleans up "Ghost Filters" when the product list changes
+  // 7. FIX GHOST FILTERS
   useEffect(() => {
-    // 1. Get a list of ALL currently valid tags from the new products
     const allValidTags = new Set<string>();
     products.forEach(p => p.tags?.forEach(t => allValidTags.add(t)));
 
-    // 2. Remove any selected tags that are no longer valid
     setSelectedTags(prev => prev.filter(tag => allValidTags.has(tag)));
-
   }, [products]);
+
 
   const activeCategories = useMemo(() => {
     const categoriesInView = new Set(products.map(p => p.category));
     return categoriesInView;
   }, [products]);
 
-  // 7. FILTERING
+  // 8. FILTERING
   const filteredProducts = useMemo(() => {
     let result = [...products];
 
@@ -308,14 +308,14 @@ export function ProductList({ products, emptyMessage }: ProductListProps) {
 
         <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredProducts.map((product) => (
-            <ProductCard key={product._id} data={product} />
+            // 👈 4. PASS SALES DATA TO THE CARD
+            <ProductCard key={product._id} data={product} sales={sales} />
           ))}
         </div>
 
         {/* EMPTY STATE */}
         {filteredProducts.length === 0 && (
           <div className="py-20 text-center text-gray-500 bg-black rounded-lg border border-gray-300">
-            {/* 👈 USE THE CUSTOM MESSAGE OR DEFAULT */}
             <p className="text-lg mb-2">
               {emptyMessage || "No products match your filters."}
             </p>

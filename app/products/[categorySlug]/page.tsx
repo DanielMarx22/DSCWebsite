@@ -1,7 +1,9 @@
 import { client } from "@/sanity/lib/client";
 import { ProductList } from "@/components/product-list";
 import Pagination from "@/components/Pagination";
+import { Sale } from "@/lib/sale-utils"; // 👈 1. Import Sale Type
 
+// CONFIG
 const ITEMS_PER_PAGE = 30;
 
 interface Product {
@@ -21,17 +23,21 @@ interface PageProps {
 }
 
 export default async function CategoryPage({ params, searchParams }: PageProps) {
+  // Await Params
   const { categorySlug } = await params;
   const { page, showAll } = await searchParams;
 
+  // Determine Filters & Pagination
   const showOutOfStock = showAll === "true";
   const currentPage = Number(page) || 1;
   const start = (currentPage - 1) * ITEMS_PER_PAGE;
   const end = start + ITEMS_PER_PAGE;
 
+  // Construct Filter Strings
   const inventoryFilter = showOutOfStock ? "" : "&& inventory > 0";
   const queryFilter = `_type == "product" && category == $category ${inventoryFilter}`;
 
+  // Queries
   const productsQuery = `
     *[${queryFilter}] | order(inventory desc, _createdAt desc) [$start...$end] {
       _id,
@@ -46,18 +52,22 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
   `;
 
   const countQuery = `count(*[${queryFilter}])`;
+
+  // 👇 NEW: Fetch Active Sales
+  const salesQuery = `*[_type == "sale" && isActive == true]`;
+
+  // Fetch Data (Parallel)
   const fetchOptions = { next: { revalidate: 0 } };
   const queryParams = { category: categorySlug, start, end };
 
-  const [products, totalCount] = await Promise.all([
+  // 👇 ADDED 'sales' TO THE PROMISE
+  const [products, totalCount, sales] = await Promise.all([
     client.fetch<Product[]>(productsQuery, queryParams, fetchOptions),
     client.fetch<number>(countQuery, queryParams, fetchOptions),
+    client.fetch<Sale[]>(salesQuery, {}, fetchOptions), // 👈 Fetch Sales
   ]);
 
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE) || 1;
-
-  // REMOVED: The "If empty return" block is GONE.
-  // We now render the full layout below regardless of product count.
 
   return (
     <div className="container mx-auto py-10 px-4">
@@ -65,13 +75,13 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
         {categorySlug} Collection
       </h1>
 
-      {/* Always render ProductList. If empty, it shows sidebar + empty message */}
+      {/* 👇 PASS 'sales' TO THE LIST */}
       <ProductList
         products={products}
+        sales={sales}
         emptyMessage={`Sorry, we are currently out of stock for ${categorySlug}. Please check back soon!`}
       />
 
-      {/* Pagination is always visible (disabled if 1 page) */}
       <Pagination
         currentPage={currentPage}
         totalPages={totalPages}

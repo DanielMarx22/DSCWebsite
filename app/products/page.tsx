@@ -1,6 +1,7 @@
 import { client } from "@/sanity/lib/client";
 import { ProductList } from "@/components/product-list";
 import Pagination from "@/components/Pagination";
+import { Sale } from "@/lib/sale-utils"; // 👈 Import the Type
 
 const ITEMS_PER_PAGE = 30;
 
@@ -22,18 +23,15 @@ interface PageProps {
 export default async function AllProductsPage({ searchParams }: PageProps) {
   const { page, showAll } = await searchParams;
 
-  // 1. DETERMINE FILTERS
-  // NOTE: If your tabs use a different URL param (like ?tab=out-of-stock), change 'showAll' below!
+  // 1. FILTERS
   const showOutOfStock = showAll === "true";
   const currentPage = Number(page) || 1;
   const start = (currentPage - 1) * ITEMS_PER_PAGE;
   const end = start + ITEMS_PER_PAGE;
 
-  // 2. DEFINE THE FILTER STRING ONCE
-  // This guarantees the List and the Count see the exact same products.
   const baseFilter = `_type == "product" ${showOutOfStock ? "" : "&& inventory > 0"}`;
 
-  // 3. FETCH PRODUCTS (The List)
+  // 2. QUERIES
   const productsQuery = `
     *[${baseFilter}] | order(inventory desc, _createdAt desc) [$start...$end] {
       _id,
@@ -47,21 +45,19 @@ export default async function AllProductsPage({ searchParams }: PageProps) {
     }
   `;
 
-  // 4. FETCH COUNT (The Pagination Number)
   const countQuery = `count(*[${baseFilter}])`;
 
-  // 5. DEBUG LOG (Check your server terminal to see what's happening)
-  console.log(`[Server] Filter: "${baseFilter}"`);
+  // 👇 NEW: Fetch Active Sales
+  const salesQuery = `*[_type == "sale" && isActive == true]`;
 
-  // 6. EXECUTE QUERIES (With no-store to prevent caching bugs)
+  // 3. FETCH EVERYTHING (Parallel)
   const fetchOptions = { next: { revalidate: 0 } }; // Force fresh data
 
-  const [products, totalCount] = await Promise.all([
+  const [products, totalCount, sales] = await Promise.all([
     client.fetch<Product[]>(productsQuery, { start, end }, fetchOptions),
     client.fetch<number>(countQuery, {}, fetchOptions),
+    client.fetch<Sale[]>(salesQuery, {}, fetchOptions), // 👈 Fetch Sales
   ]);
-
-  console.log(`[Server] Found ${products.length} products. Total count: ${totalCount}`);
 
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE) || 1;
 
@@ -74,7 +70,8 @@ export default async function AllProductsPage({ searchParams }: PageProps) {
 
       {products.length > 0 ? (
         <>
-          <ProductList products={products} />
+          {/* 👇 Pass 'sales' to the list */}
+          <ProductList products={products} sales={sales} />
 
           <Pagination
             currentPage={currentPage}

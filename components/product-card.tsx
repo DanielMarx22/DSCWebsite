@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { calculateSalePrice, Sale } from "@/lib/sale-utils"; // 👈 Import Helper
 
 interface ProductCardProps {
   data: {
@@ -11,14 +12,24 @@ interface ProductCardProps {
     price: number;
     imageUrl: string;
     category: string;
-    inventory?: number; // 👈 Added optional inventory field
+    tags?: string[]; // 👈 Ensure tags are passed for filtering
+    inventory?: number;
   };
+  sales?: Sale[]; // 👈 Accept sales data
 }
 
-export function ProductCard({ data }: ProductCardProps) {
+export function ProductCard({ data, sales }: ProductCardProps) {
   const href = `/products/${data.category}/${data.slug}`;
-  // Treat undefined/null as 0 just to be safe
+
+  // 1. Calculate Price (Is there a sale?)
+  const { salePrice, originalPrice, isOnSale } = calculateSalePrice(data, sales || []);
+
+  // 2. Stock Logic
   const isOutOfStock = (data.inventory || 0) === 0;
+
+  // Helper to format money
+  const formatPrice = (amount: number) =>
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
 
   return (
     <Link
@@ -41,10 +52,17 @@ export function ProductCard({ data }: ProductCardProps) {
           </div>
         )}
 
-        {/* 🔴 OUT OF STOCK BADGE */}
+        {/* 🔴 OUT OF STOCK BADGE (Priority) */}
         {isOutOfStock && (
           <div className="absolute top-2 left-2 bg-red-600 text-white text-xs font-bold px-2 py-1 rounded shadow-md z-10">
             Out of Stock
+          </div>
+        )}
+
+        {/* 🟢 SALE BADGE (Only if in stock) */}
+        {!isOutOfStock && isOnSale && (
+          <div className="absolute top-2 right-2 bg-green-600 text-white text-xs font-bold px-2 py-1 rounded shadow-md z-10">
+            SALE
           </div>
         )}
       </div>
@@ -54,12 +72,27 @@ export function ProductCard({ data }: ProductCardProps) {
         <h3 className="font-bold text-lg text-white truncate group-hover:text-blue-400 transition-colors">
           {data.name}
         </h3>
-        
-        <p className="mt-2 text-gray-400 font-medium">
-          {data.price 
-            ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(data.price)
-            : "Price Unavailable"}
-        </p>
+
+        {/* PRICE SECTION */}
+        <div className="mt-2 font-medium">
+          {isOnSale ? (
+            <div className="flex items-center gap-2">
+              {/* New Sale Price */}
+              <span className="text-green-400 font-bold text-lg">
+                {formatPrice(salePrice)}
+              </span>
+              {/* Old Price Strikethrough */}
+              <span className="text-gray-500 line-through text-sm">
+                {formatPrice(originalPrice)}
+              </span>
+            </div>
+          ) : (
+            // Regular Price
+            <span className="text-gray-400">
+              {data.price ? formatPrice(data.price) : "Price Unavailable"}
+            </span>
+          )}
+        </div>
       </div>
     </Link>
   );

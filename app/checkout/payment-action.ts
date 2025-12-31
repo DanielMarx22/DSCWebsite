@@ -4,6 +4,7 @@ import { SquareClient, SquareEnvironment } from "square";
 import { randomUUID } from "crypto";
 import { createClient } from "next-sanity";
 import { apiVersion, dataset, projectId } from "@/sanity/env";
+import { calculateSalePrice, Sale } from "@/lib/sale-utils"; // 👈 1. Import Helper
 
 const square = new SquareClient({
     token: process.env.SQUARE_ACCESS_TOKEN!,
@@ -18,7 +19,6 @@ const sanityWrite = createClient({
     token: process.env.SANITY_API_TOKEN,
 });
 
-// 👇 Update signature to accept marketingConsent
 export async function processSquarePayment(
     token: string,
     cartItems: any[],
@@ -26,17 +26,56 @@ export async function processSquarePayment(
     marketingConsent: boolean
 ) {
     try {
-        // 1. Create Line Items
-        const lineItems = cartItems.map((item) => ({
-            name: item.name,
-            quantity: item.quantity.toString(),
-            basePriceMoney: {
-                amount: BigInt(Math.round(item.price * 100)),
-                currency: "USD" as const,
-            },
-        }));
+        // --- 1. SECURITY: Re-Fetch Data from Server ---
+        // We do NOT trust 'item.price' from the client. 
+        // We fetch the real product data and active sales to calculate the price here.
 
-        // 2. Create Order
+        const productIds = cartItems.map((item) => item.id);
+
+        // Fetch Products (Price/Tags/Category) AND Active Sales
+        const [serverProducts, activeSales] = await Promise.all([
+            sanityWrite.fetch<any[]>(
+                `*[_type == "product" && _id in $ids]{
+                    _id, 
+                    title, 
+                    price, 
+                    category, 
+                    tags
+                }`,
+                { ids: productIds }
+            ),
+            sanityWrite.fetch<Sale[]>(`*[_type == "sale" && isActive == true]`)
+        ]);
+
+        // --- 2. Build Line Items with CALCULATED Prices ---
+        const lineItems = cartItems.map((cartItem) => {
+            // Find the real product data from Sanity
+            const product = serverProducts.find((p) => p._id === cartItem.id);
+
+            if (!product) {
+                throw new Error(`Product not found: ${cartItem.name}`);
+            }
+
+            // ⚠️ CALCULATE SALE PRICE ON SERVER ⚠️
+            const { salePrice } = calculateSalePrice({
+                _id: product._id,
+                price: product.price,
+                category: product.category,
+                tags: product.tags
+            }, activeSales);
+
+            return {
+                name: product.title,
+                quantity: cartItem.quantity.toString(),
+                basePriceMoney: {
+                    // Use the CALCULATED salePrice, not cartItem.price
+                    amount: BigInt(Math.round(salePrice * 100)),
+                    currency: "USD" as const,
+                },
+            };
+        });
+
+        // --- 3. Create Order (Square) ---
         const orderResponse = await square.orders.create({
             order: {
                 locationId: process.env.NEXT_PUBLIC_SQUARE_LOCATION_ID!,
@@ -47,8 +86,7 @@ export async function processSquarePayment(
 
         if (!orderResponse.order?.id) throw new Error("Failed to create order.");
 
-        // 3. Process Payment (Receipt Logic)
-        // We ALWAYS send the email to Square so they get the receipt
+        // --- 4. Process Payment ---
         const paymentResponse = await square.payments.create({
             sourceId: token,
             idempotencyKey: randomUUID(),
@@ -60,8 +98,7 @@ export async function processSquarePayment(
             buyerEmailAddress: email,
         });
 
-        // 4. Update Inventory & Handle Marketing (Parallel)
-        // We use Promise.allSettled so if marketing fails, it doesn't crash the order
+        // --- 5. Update Inventory & Marketing ---
         await Promise.allSettled([
             // A. Decrement Inventory
             ...cartItems.map(item =>
@@ -71,7 +108,7 @@ export async function processSquarePayment(
                     .commit()
             ),
 
-            // B. MARKETING LOGIC (Only if they opted in) 👈
+            // B. Marketing Logic
             marketingConsent
                 ? sanityWrite.create({
                     _type: 'subscriber',
