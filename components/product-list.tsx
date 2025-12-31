@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useRouter, useSearchParams } from "next/navigation"; // 👈 Added for URL control
+import { useRouter, useSearchParams } from "next/navigation";
 import { ProductCard } from "@/components/product-card";
 import { SlidersHorizontal, X, ChevronDown, ChevronUp } from "lucide-react";
 
@@ -19,6 +19,7 @@ type Product = {
 
 interface ProductListProps {
   products: Product[];
+  emptyMessage?: string; // 👈 NEW PROP
 }
 
 // --- HELPER: COLLAPSIBLE FILTER SECTION ---
@@ -66,39 +67,33 @@ function FilterSection({ title, options, selected, onToggle }: any) {
 }
 
 // --- MAIN COMPONENT ---
-export function ProductList({ products }: ProductListProps) {
+export function ProductList({ products, emptyMessage }: ProductListProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // 1. URL STATE (Server Side Filter)
-  const showAll = searchParams.get("showAll") === "true"; // True = Show Out of Stock
+  // 1. URL STATE
+  const showAll = searchParams.get("showAll") === "true";
 
-  // 2. LOCAL STATE (Client Side Filters)
+  // 2. LOCAL STATE
   const [sortOption, setSortOption] = useState("newest");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [priceRange, setPriceRange] = useState<{ min: string; max: string }>({ min: "", max: "" });
 
-  // 3. HANDLE STOCK TOGGLE (Updates URL)
+  // 3. HANDLE STOCK TOGGLE
   const toggleStock = (type: "in" | "out") => {
     const params = new URLSearchParams(searchParams.toString());
 
     if (type === "out") {
-      // Toggle "Out of Stock"
       if (showAll) {
-        params.delete("showAll"); // Turn OFF (Back to In Stock Only)
+        params.delete("showAll");
       } else {
-        params.set("showAll", "true"); // Turn ON
+        params.set("showAll", "true");
       }
     } else {
-      // Clicked "In Stock" -> Force "Show All" to false (Reset to default)
       params.delete("showAll");
     }
-
-    // Reset to page 1 to avoid empty page bugs
     params.set("page", "1");
-
-    // Soft Refresh
     router.push(`?${params.toString()}`, { scroll: false });
   };
 
@@ -108,7 +103,7 @@ export function ProductList({ products }: ProductListProps) {
     return Math.max(...products.map(p => p.price));
   }, [products]);
 
-  // 5. PRICE INPUT HANDLERS
+  // 5. PRICE HANDLERS
   const handleMinBlur = () => {
     if (priceRange.min === "") return;
     let val = parseFloat(priceRange.min);
@@ -153,19 +148,16 @@ export function ProductList({ products }: ProductListProps) {
     return categoriesInView;
   }, [products]);
 
-  // 7. CLIENT SIDE FILTERING (Tags & Price Only)
-  // Note: We do NOT filter stock here anymore. We trust the Server.
+  // 7. FILTERING
   const filteredProducts = useMemo(() => {
     let result = [...products];
 
-    // A. Filter by Tags
     if (selectedTags.length > 0) {
       result = result.filter((product) =>
         selectedTags.some((tag) => product.tags?.includes(tag))
       );
     }
 
-    // B. Filter by Price
     if (priceRange.min) {
       result = result.filter((p) => (p.price || 0) >= Number(priceRange.min));
     }
@@ -173,12 +165,9 @@ export function ProductList({ products }: ProductListProps) {
       result = result.filter((p) => (p.price || 0) <= Number(priceRange.max));
     }
 
-    // C. Sort Logic
     result.sort((a, b) => {
-      // Always put In-Stock items first
       const stockA = (a.inventory || 0) > 0 ? 1 : 0;
       const stockB = (b.inventory || 0) > 0 ? 1 : 0;
-
       if (stockA !== stockB) return stockB - stockA;
 
       switch (sortOption) {
@@ -190,7 +179,6 @@ export function ProductList({ products }: ProductListProps) {
     });
 
     return result;
-
   }, [products, sortOption, selectedTags, priceRange]);
 
   const toggleTag = (tag: string) => {
@@ -202,7 +190,7 @@ export function ProductList({ products }: ProductListProps) {
   return (
     <div className="flex flex-col md:flex-row gap-8 pt-6">
 
-      {/* --- SIDEBAR --- */}
+      {/* --- SIDEBAR (Always Visible) --- */}
       <aside className={`
         fixed md:relative inset-0 z-50 bg-white md:bg-transparent p-6 md:p-0 overflow-y-auto md:overflow-visible transition-transform duration-300 w-full md:w-64 flex-shrink-0
         ${showMobileFilters ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
@@ -214,7 +202,7 @@ export function ProductList({ products }: ProductListProps) {
           </button>
         </div>
 
-        {/* 1. PRICE FILTER */}
+        {/* PRICE FILTER */}
         <div className="border-b border-gray-200 pb-6 md:pt-0">
           <div className="flex justify-between items-end mb-4">
             <h3 className="font-bold text-lg">Price</h3>
@@ -239,14 +227,14 @@ export function ProductList({ products }: ProductListProps) {
           </div>
         </div>
 
-        {/* 2. AVAILABILITY FILTER (Restored!) */}
+        {/* AVAILABILITY FILTER */}
         <div className="border-b border-gray-200 py-6">
           <h3 className="font-bold text-lg mb-4">Availability</h3>
           <div className="space-y-3">
             <label className="flex items-center space-x-2 cursor-pointer">
               <input
                 type="checkbox"
-                checked={true} // Always checked visually to show "In Stock" is active
+                checked={true}
                 onChange={() => toggleStock("in")}
                 className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
               />
@@ -255,7 +243,7 @@ export function ProductList({ products }: ProductListProps) {
             <label className="flex items-center space-x-2 cursor-pointer">
               <input
                 type="checkbox"
-                checked={showAll} // Only checked if URL has ?showAll=true
+                checked={showAll}
                 onChange={() => toggleStock("out")}
                 className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
               />
@@ -264,7 +252,7 @@ export function ProductList({ products }: ProductListProps) {
           </div>
         </div>
 
-        {/* 3. TAGS */}
+        {/* TAGS (Only shows if products have tags) */}
         {activeCategories.has('fish') && tagGroups.fish.length > 0 && (
           <FilterSection title="Fish Type" options={tagGroups.fish} selected={selectedTags} onToggle={toggleTag} />
         )}
@@ -277,15 +265,6 @@ export function ProductList({ products }: ProductListProps) {
         {activeCategories.has('supplies') && tagGroups.supplies.length > 0 && (
           <FilterSection title="Supply Type" options={tagGroups.supplies} selected={selectedTags} onToggle={toggleTag} />
         )}
-
-        <div className="md:hidden mt-8">
-          <button
-            onClick={() => setShowMobileFilters(false)}
-            className="w-full bg-black text-white py-3 rounded-lg font-bold"
-          >
-            Show {filteredProducts.length} Results
-          </button>
-        </div>
       </aside>
 
       {/* --- MAIN CONTENT --- */}
@@ -322,21 +301,24 @@ export function ProductList({ products }: ProductListProps) {
           ))}
         </div>
 
+        {/* EMPTY STATE */}
         {filteredProducts.length === 0 && (
-          <div className="py-20 text-center text-gray-500 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-            <p className="text-lg mb-2">No products match your filters.</p>
+          <div className="py-20 text-center text-gray-500 bg-black rounded-lg border border-gray-300">
+            {/* 👈 USE THE CUSTOM MESSAGE OR DEFAULT */}
+            <p className="text-lg mb-2">
+              {emptyMessage || "No products match your filters."}
+            </p>
             <button
               onClick={() => {
                 setSelectedTags([]);
                 setPriceRange({ min: "", max: "" });
-                // Also reset URL stock filter
                 const params = new URLSearchParams(searchParams.toString());
                 params.delete("showAll");
                 router.push(`?${params.toString()}`);
               }}
               className="text-blue-600 font-bold hover:underline"
             >
-              Clear all filters
+              Clear filters
             </button>
           </div>
         )}

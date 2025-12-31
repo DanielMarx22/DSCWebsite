@@ -1,8 +1,7 @@
 import { client } from "@/sanity/lib/client";
 import { ProductList } from "@/components/product-list";
-import Pagination from "@/components/Pagination"; // 👈 New Import
+import Pagination from "@/components/Pagination";
 
-// 1. Config: How many items per page?
 const ITEMS_PER_PAGE = 30;
 
 interface Product {
@@ -18,23 +17,23 @@ interface Product {
 
 interface PageProps {
   params: Promise<{ categorySlug: string }>;
-  searchParams: Promise<{ page?: string }>; // 👈 Added searchParams for pagination
+  searchParams: Promise<{ page?: string; showAll?: string }>;
 }
 
 export default async function CategoryPage({ params, searchParams }: PageProps) {
-  // 2. Await both params (Next.js 15 requirement)
   const { categorySlug } = await params;
-  const { page } = await searchParams;
+  const { page, showAll } = await searchParams;
 
-  // 3. Calculate Pagination Range
+  const showOutOfStock = showAll === "true";
   const currentPage = Number(page) || 1;
   const start = (currentPage - 1) * ITEMS_PER_PAGE;
   const end = start + ITEMS_PER_PAGE;
 
-  // 4. Update Query to use Slicing [$start...$end]
-  // We also fetch the 'count' to know how many pages to show
+  const inventoryFilter = showOutOfStock ? "" : "&& inventory > 0";
+  const queryFilter = `_type == "product" && category == $category ${inventoryFilter}`;
+
   const productsQuery = `
-    *[_type == "product" && category == $category] | order(_createdAt desc) [$start...$end] {
+    *[${queryFilter}] | order(inventory desc, _createdAt desc) [$start...$end] {
       _id,
       "name": title,
       "slug": slug.current,
@@ -46,51 +45,33 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
     }
   `;
 
-  const countQuery = `count(*[_type == "product" && category == $category])`;
+  const countQuery = `count(*[${queryFilter}])`;
+  const fetchOptions = { next: { revalidate: 0 } };
+  const queryParams = { category: categorySlug, start, end };
 
-  // 5. Fetch Data in Parallel (Fast)
   const [products, totalCount] = await Promise.all([
-    client.fetch<Product[]>(productsQuery, { category: categorySlug, start, end }),
-    client.fetch<number>(countQuery, { category: categorySlug }),
+    client.fetch<Product[]>(productsQuery, queryParams, fetchOptions),
+    client.fetch<number>(countQuery, queryParams, fetchOptions),
   ]);
 
-  const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE) || 1;
 
-  // 6. Handle "No Products" State
-  if (!products || products.length === 0) {
-    return (
-      <div className="container mx-auto py-20 px-4 text-center">
-        <h1 className="text-4xl font-extrabold capitalize mb-4 text-white">
-          {categorySlug}
-        </h1>
-        <p className="text-gray-400">
-          {currentPage > 1 ? "No more products on this page." : "No products found."}
-        </p>
-        {/* Allow user to go back if they are on an empty page (e.g. page 99) */}
-        {currentPage > 1 && (
-          <div className="mt-4">
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              baseUrl={`/products/${categorySlug}`}
-            />
-          </div>
-        )}
-      </div>
-    );
-  }
+  // REMOVED: The "If empty return" block is GONE.
+  // We now render the full layout below regardless of product count.
 
-  // 7. Render Layout (Unchanged structure, just added Pagination at bottom)
   return (
     <div className="container mx-auto py-10 px-4">
       <h1 className="text-4xl font-extrabold capitalize mb-8 text-white">
         {categorySlug} Collection
       </h1>
 
-      {/* Existing Product List Component */}
-      <ProductList products={products} />
+      {/* Always render ProductList. If empty, it shows sidebar + empty message */}
+      <ProductList
+        products={products}
+        emptyMessage={`Sorry, we are currently out of stock for ${categorySlug}. Please check back soon!`}
+      />
 
-      {/* New Pagination Component */}
+      {/* Pagination is always visible (disabled if 1 page) */}
       <Pagination
         currentPage={currentPage}
         totalPages={totalPages}
