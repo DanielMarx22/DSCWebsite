@@ -26,6 +26,7 @@ export const Navbar = () => {
     { name: "Fish", href: "/products/fish" },
     { name: "Inverts", href: "/products/inverts" },
     { name: "Supplies", href: "/products/supplies" },
+    { name: "Aquariums", href: "/products/aquariums" },
   ];
 
   useEffect(() => {
@@ -47,10 +48,8 @@ export const Navbar = () => {
 
   return (
     <nav className="sticky top-0 z-[100] bg-black/85 backdrop-blur-md border-b border-white/10 text-white transition-all duration-300 shadow-2xl">
-
       {/* 1. TOP BAR */}
       <div className="container mx-auto flex items-center justify-between py-4 px-6 relative">
-
         {/* LEFT: HAMBURGER (Mobile) */}
         <div className="flex items-center space-x-2">
           <Button
@@ -59,7 +58,11 @@ export const Navbar = () => {
             onClick={() => setMobileOpen((prev) => !prev)}
             aria-label="Toggle Menu"
           >
-            {mobileOpen ? <XMarkIcon className="h-7 w-7" /> : <Bars3Icon className="h-7 w-7" />}
+            {mobileOpen ? (
+              <XMarkIcon className="h-7 w-7" />
+            ) : (
+              <Bars3Icon className="h-7 w-7" />
+            )}
           </Button>
         </div>
 
@@ -77,7 +80,10 @@ export const Navbar = () => {
             </div>
             {/* 🎨 COLORED TEXT (text-2xl) */}
             <span className="text-2xl font-extrabold tracking-tight whitespace-nowrap">
-              Down South <span className="text-blue-500 group-hover:text-blue-400 transition-colors">Corals</span>
+              Down South{" "}
+              <span className="text-blue-500 group-hover:text-blue-400 transition-colors">
+                Corals
+              </span>
             </span>
           </Link>
         </div>
@@ -101,9 +107,11 @@ export const Navbar = () => {
 
         {/* RIGHT: SEARCH & CART */}
         <div className="flex items-center space-x-5">
-
           {/* DESKTOP SEARCH FORM */}
-          <form onSubmit={handleSearch} className="hidden md:block relative group">
+          <form
+            onSubmit={handleSearch}
+            className="hidden md:block relative group"
+          >
             <input
               type="text"
               placeholder="Search..."
@@ -120,14 +128,18 @@ export const Navbar = () => {
             className="md:hidden text-white hover:bg-white/10 p-2"
             onClick={() => {
               const term = prompt("Search for products:");
-              if (term) router.push(`/search?query=${encodeURIComponent(term)}`);
+              if (term)
+                router.push(`/search?query=${encodeURIComponent(term)}`);
             }}
           >
             <MagnifyingGlassIcon className="h-6 w-6" />
           </Button>
 
           {/* CART ICON */}
-          <Link href="/checkout" className="relative group p-2 hover:bg-white/10 rounded-full transition-colors">
+          <Link
+            href="/checkout"
+            className="relative group p-2 hover:bg-white/10 rounded-full transition-colors"
+          >
             <ShoppingCartIcon className="h-7 w-7 group-hover:text-blue-400 transition-colors" />
             {cartCount > 0 && (
               <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white shadow-lg animate-in zoom-in border-2 border-black">

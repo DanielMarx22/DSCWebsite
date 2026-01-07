@@ -13,6 +13,7 @@ const headerImages: Record<string, string> = {
   corals: "/images/backgrounds/coralbackground.webp",
   inverts: "/images/backgrounds/invertbackground.webp",
   supplies: "/images/backgrounds/radionxr30background.webp",
+  aquariums: "/images/backgrounds/aquarium.webp",
 };
 
 interface Product {
@@ -31,7 +32,10 @@ interface PageProps {
   searchParams: Promise<{ page?: string; showAll?: string }>;
 }
 
-export default async function CategoryPage({ params, searchParams }: PageProps) {
+export default async function CategoryPage({
+  params,
+  searchParams,
+}: PageProps) {
   const { categorySlug } = await params;
   const { page, showAll } = await searchParams;
 
@@ -69,15 +73,14 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
   ]);
 
   const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE) || 1;
-  const headerImageSrc = headerImages[categorySlug.toLowerCase()] || headerImages['corals'];
+  const headerImageSrc =
+    headerImages[categorySlug.toLowerCase()] || headerImages["corals"];
 
   return (
     // 1. OUTER WRAPPER: Full width breakout
     <div className="bg-black min-h-screen w-[100vw] relative left-[calc(-50vw+50%)] overflow-x-hidden">
-
       {/* 🖼️ HERO WRAPPER */}
       <div className="w-full bg-black flex justify-center border-b border-gray-900">
-
         {/* ✨ FIX: STRICT ASPECT RATIO
             - aspect-[16/9]: On mobile, it stays a rectangle (like a YouTube video).
             - md:aspect-[3/1]: On desktop, it becomes a thin cinematic strip.
@@ -99,11 +102,13 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
           {/* Centered Title */}
           <div className="absolute inset-0 flex items-center justify-center">
             <h1 className="relative z-10 text-[8vw] md:text-7xl font-black capitalize text-white drop-shadow-2xl tracking-tighter leading-none text-center">
-              {categorySlug} <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-600">Collection</span>
+              {categorySlug}{" "}
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-600">
+                Collection
+              </span>
             </h1>
           </div>
         </div>
-
       </div>
 
       {/* 📦 CONTENT WRAPPER */}
