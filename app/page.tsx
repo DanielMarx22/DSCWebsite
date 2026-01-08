@@ -292,7 +292,7 @@ export default async function Home() {
 
         {/* Changed grid to flex + overflow for scrolling */}
         <div className="flex overflow-x-auto gap-4 pb-8 snap-x snap-mandatory scrollbar-hide">
-          {["Fish", "Corals", "Inverts", "Supplies", "Tanks"].map((cat) => {
+          {["Fish", "Corals", "Inverts", "Supplies", "Aquariums"].map((cat) => {
             const objectFitClass =
               cat === "Supplies" ? "object-contain" : "object-cover";
 
