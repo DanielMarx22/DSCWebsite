@@ -7,9 +7,9 @@ import { calculateSalePrice, Sale } from "@/lib/sale-utils";
 
 // ✅ GLOBAL CURRENCY FORMATTER
 const formatMoney = (amount: number) => {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
   }).format(amount);
 };
 
@@ -29,7 +29,7 @@ export default async function ProductPage({ params }: PageProps) {
       "imageUrl": images[0].asset->url,
       price,
       inventory,
-      "category": coalesce(category->slug.current, categorySlug, "uncategorized"),
+      "category": category,
       tags 
     }
   `;
@@ -38,17 +38,19 @@ export default async function ProductPage({ params }: PageProps) {
 
   const [product, sales] = await Promise.all([
     client.fetch(productQuery, { slug }, { next: { revalidate: 0 } }),
-    client.fetch<Sale[]>(salesQuery, {}, { next: { revalidate: 0 } })
+    client.fetch<Sale[]>(salesQuery, {}, { next: { revalidate: 0 } }),
   ]);
 
   if (!product) return notFound();
 
-  const { salePrice, originalPrice, isOnSale } = calculateSalePrice(product, sales);
+  const { salePrice, originalPrice, isOnSale } = calculateSalePrice(
+    product,
+    sales
+  );
 
   return (
     <div className="container mx-auto px-4 py-12 text-white">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-
         {/* LEFT: IMAGE */}
         <div className="relative aspect-square bg-gray-900 rounded-xl overflow-hidden border border-gray-800">
           {product.imageUrl ? (
@@ -60,7 +62,9 @@ export default async function ProductPage({ params }: PageProps) {
               priority
             />
           ) : (
-            <div className="flex h-full items-center justify-center text-gray-500">No Image</div>
+            <div className="flex h-full items-center justify-center text-gray-500">
+              No Image
+            </div>
           )}
 
           {isOnSale && (product.inventory || 0) > 0 && (
@@ -87,7 +91,9 @@ export default async function ProductPage({ params }: PageProps) {
               </div>
             ) : (
               <p className="text-2xl text-gray-300 font-medium">
-                {product.price ? formatMoney(product.price) : "Price Unavailable"}
+                {product.price
+                  ? formatMoney(product.price)
+                  : "Price Unavailable"}
               </p>
             )}
           </div>
@@ -97,10 +103,11 @@ export default async function ProductPage({ params }: PageProps) {
               id: product._id,
               name: product.name,
               price: salePrice,
+              originalPrice: originalPrice,
               imageUrl: product.imageUrl,
               maxQuantity: product.inventory || 0,
               slug: product.slug,
-              category: product.category
+              category: product.category,
             }}
           />
 
