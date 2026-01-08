@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useCartStore } from "@/store/cart-store";
@@ -10,6 +10,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Truck, Store, AlertCircle, CalendarDays } from "lucide-react";
 import { DayPicker } from "react-day-picker";
+import { getSimilarProducts } from "@/app/actions/get-similar-products";
 import {
   addDays,
   format,
@@ -51,14 +52,29 @@ interface Props {
 }
 
 export default function CheckoutClient({
-  recommendations,
+  recommendations: initialRecs,
   settings,
   paymentMethods,
 }: Props) {
   const { items, removeItem, updateQuantity } = useCartStore();
+  const [smartRecs, setSmartRecs] = useState<Product[]>([]);
   const [deliveryMethod, setDeliveryMethod] = useState<"ship" | "pickup">(
     "ship"
   );
+  useEffect(() => {
+    const fetchRecs = async () => {
+      if (items.length === 0) return;
+
+      const cartIds = items.map((i) => i.id);
+      const similar = await getSimilarProducts(cartIds);
+
+      if (similar.length > 0) {
+        setSmartRecs(similar);
+      }
+    };
+
+    fetchRecs();
+  }, [items]); // Re-run if cart items change
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
   const [selectedPaymentMethod, setSelectedPaymentMethod] =
     useState<string>("card");
@@ -481,13 +497,16 @@ export default function CheckoutClient({
         </div>
       </div>
 
-      {recommendations && recommendations.length > 0 && (
+      {(smartRecs.length > 0 || (initialRecs && initialRecs.length > 0)) && (
         <div className="mt-24 border-t border-gray-800 pt-16">
           <h2 className="text-2xl font-bold mb-10 text-white">
-            You Might Also Like
+            {smartRecs.length > 0
+              ? "Picked Just For You"
+              : "You Might Also Like"}
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8">
-            {recommendations.map((product) => (
+            {/* Prioritize Smart Recs, fallback to Initial Recs */}
+            {(smartRecs.length > 0 ? smartRecs : initialRecs).map((product) => (
               <ProductCard key={product._id} data={product} />
             ))}
           </div>
