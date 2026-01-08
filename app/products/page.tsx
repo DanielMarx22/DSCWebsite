@@ -63,10 +63,8 @@ export default async function AllProductsPage({ searchParams }: PageProps) {
   return (
     // 1. OUTER WRAPPER: Force Full Width (Break out of layout constraints)
     <div className="bg-black min-h-screen w-[100vw] relative left-[calc(-50vw+50%)] overflow-x-hidden">
-
       {/* 🖼️ HERO WRAPPER */}
       <div className="w-full bg-black flex justify-center border-b border-gray-900">
-
         {/* CONSTRAINED IMAGE BOX (Same logic as Category Page) */}
         <div className="relative w-full max-w-[1800px] aspect-[16/9] md:aspect-[3/1] max-h-[500px] overflow-hidden">
           <Image
@@ -83,7 +81,10 @@ export default async function AllProductsPage({ searchParams }: PageProps) {
           {/* Centered Title */}
           <div className="absolute inset-0 flex items-center justify-center">
             <h1 className="relative z-10 text-[8vw] md:text-7xl font-black capitalize text-white drop-shadow-2xl tracking-tighter leading-none text-center">
-              All <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-600">Products</span>
+              All{" "}
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-600">
+                Products
+              </span>
             </h1>
           </div>
         </div>
@@ -96,6 +97,7 @@ export default async function AllProductsPage({ searchParams }: PageProps) {
             <ProductList
               products={products}
               sales={sales}
+              totalCount={totalCount}
               emptyMessage="No products found matching your criteria."
             />
           </>

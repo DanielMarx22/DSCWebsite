@@ -116,6 +116,7 @@ export default async function CategoryPage({
         <ProductList
           products={products}
           sales={sales}
+          totalCount={totalCount}
           emptyMessage={`Sorry, we are currently out of stock for ${categorySlug}. Please check back soon!`}
         />
 

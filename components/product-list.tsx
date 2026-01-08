@@ -22,6 +22,7 @@ interface ProductListProps {
   products: Product[];
   sales?: Sale[];
   emptyMessage?: string;
+  totalCount: number;
 }
 
 // --- HELPER: COLLAPSIBLE FILTER SECTION ---
@@ -79,6 +80,7 @@ export function ProductList({
   products,
   sales,
   emptyMessage,
+  totalCount,
 }: ProductListProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -340,7 +342,7 @@ export function ProductList({
       <div className="flex-1 w-full min-w-0">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
           <span className="text-sm text-gray-400 font-medium">
-            Showing {filteredProducts.length} Results
+            Showing {filteredProducts.length} of {totalCount} Results
           </span>
           <div className="flex gap-2 w-full sm:w-auto">
             <button
