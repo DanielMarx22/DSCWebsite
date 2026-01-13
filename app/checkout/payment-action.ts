@@ -4,7 +4,8 @@ import { SquareClient, SquareEnvironment } from "square";
 import { randomUUID } from "crypto";
 import { createClient } from "next-sanity";
 import { apiVersion, dataset, projectId } from "@/sanity/env";
-import { calculateSalePrice, Sale } from "@/lib/sale-utils"; // 👈 Import the helper
+import { calculateSalePrice, Sale } from "@/lib/sale-utils";
+import { sendReceiptEmail } from "@/app/actions/send-receipt"; // 👈 1. Import Emailer
 
 const square = new SquareClient({
   token: process.env.SQUARE_ACCESS_TOKEN!,
@@ -19,6 +20,15 @@ const sanityWrite = createClient({
   token: process.env.SANITY_API_TOKEN,
 });
 
+// Helper to fix "BigInt" crash (Square uses BigInts, JSON hates them)
+const sanitizeForEmail = (data: any) => {
+  return JSON.parse(
+    JSON.stringify(data, (key, value) =>
+      typeof value === "bigint" ? value.toString() : value
+    )
+  );
+};
+
 export async function processSquarePayment(
   token: string,
   cartItems: any[],
@@ -29,7 +39,6 @@ export async function processSquarePayment(
     // --- 1. SECURITY: Re-Fetch Data from Server ---
     const productIds = cartItems.map((item) => item.id);
 
-    // Fetch Products (Price/Tags/Category) AND Active Sales
     const [serverProducts, activeSales] = await Promise.all([
       sanityWrite.fetch<any[]>(
         `*[_type == "product" && _id in $ids]{
@@ -44,17 +53,11 @@ export async function processSquarePayment(
       sanityWrite.fetch<Sale[]>(`*[_type == "sale" && isActive == true]`),
     ]);
 
-    // --- 2. Build Line Items with CALCULATED Sale Prices ---
+    // --- 2. Build Line Items ---
     const lineItems = cartItems.map((cartItem) => {
-      // Find the real product data from Sanity
       const product = serverProducts.find((p) => p._id === cartItem.id);
+      if (!product) throw new Error(`Product not found: ${cartItem.name}`);
 
-      if (!product) {
-        throw new Error(`Product not found: ${cartItem.name}`);
-      }
-
-      // ⚠️ CALCULATE SALE PRICE ON SERVER ⚠️
-      // This ensures Square charges the $80 sale price, not the $100 regular price
       const { salePrice } = calculateSalePrice(
         {
           _id: product._id,
@@ -69,14 +72,13 @@ export async function processSquarePayment(
         name: product.title,
         quantity: cartItem.quantity.toString(),
         basePriceMoney: {
-          // Use the CALCULATED salePrice
           amount: BigInt(Math.round(salePrice * 100)),
           currency: "USD" as const,
         },
       };
     });
 
-    // --- 3. Create Order (Square) ---
+    // --- 3. Create Order ---
     const orderResponse = await square.orders.create({
       order: {
         locationId: process.env.NEXT_PUBLIC_SQUARE_LOCATION_ID!,
@@ -101,12 +103,9 @@ export async function processSquarePayment(
 
     // --- 5. Update Inventory & Marketing ---
     await Promise.allSettled([
-      // A. Decrement Inventory
       ...cartItems.map((item) =>
         sanityWrite.patch(item.id).dec({ inventory: item.quantity }).commit()
       ),
-
-      // B. Marketing Logic
       marketingConsent
         ? sanityWrite.create({
             _type: "subscriber",
@@ -116,12 +115,18 @@ export async function processSquarePayment(
         : Promise.resolve(),
     ]);
 
-    const paymentResult = JSON.parse(
-      JSON.stringify(paymentResponse.payment, (key, value) =>
-        typeof value === "bigint" ? value.toString() : value
-      )
-    );
+    // --- 6. SEND EMAIL RECEIPT (With Images!) ---
+    // We do this server-side so it sends even if the user closes the tab immediately.
+    try {
+      const sanitizedOrder = sanitizeForEmail(orderResponse.order);
+      // 👇 Passing cartItems (3rd arg) allows the email to look up the images
+      await sendReceiptEmail(email, sanitizedOrder, cartItems);
+    } catch (emailErr) {
+      console.error("Auto-Receipt Failed (Payment still worked):", emailErr);
+      // We don't throw here, because payment was successful
+    }
 
+    const paymentResult = sanitizeForEmail(paymentResponse.payment);
     return { success: true, payment: paymentResult };
   } catch (error: any) {
     console.error("Payment Error:", error);
