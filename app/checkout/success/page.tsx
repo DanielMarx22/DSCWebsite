@@ -77,8 +77,8 @@ function SuccessContent() {
     );
   }
 
-  // 👇 Destructure 'sales' from data
-  const { order, recommendations, sales, email } = data;
+  // 👇 Destructure 'receiptUrl' AND 'sales'
+  const { order, recommendations, sales, receiptUrl, email } = data;
 
   const total = (Number(order.totalMoney?.amount || 0) / 100).toFixed(2);
   const tax = (Number(order.totalTaxMoney?.amount || 0) / 100).toFixed(2);
@@ -158,6 +158,25 @@ function SuccessContent() {
         {/* ACTION BUTTONS */}
         <div className="p-6 bg-gray-950/50 border-t border-gray-800 flex flex-col gap-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* 1. VIEW OFFICIAL RECEIPT (White Button) */}
+            {receiptUrl && receiptUrl !== "#" ? (
+              <Button
+                asChild
+                className="w-full bg-white text-black hover:bg-gray-200 font-bold border-0 h-12"
+              >
+                <a href={receiptUrl} target="_blank" rel="noopener noreferrer">
+                  <Printer className="w-4 h-4 mr-2" /> View Official Receipt
+                </a>
+              </Button>
+            ) : (
+              <Button
+                disabled
+                className="w-full bg-gray-800 text-gray-400 border border-gray-700 h-12"
+              >
+                <Printer className="w-4 h-4 mr-2" /> Receipt Unavailable
+              </Button>
+            )}
+
             {/* 2. CONTINUE SHOPPING (Blue Button) */}
             <Button
               asChild
@@ -167,32 +186,32 @@ function SuccessContent() {
                 Shop Again <ArrowRight className="w-4 h-4 ml-2" />
               </Link>
             </Button>
-
-            {/* 3. EMAIL ME BUTTON */}
-            <Button
-              onClick={handleSendEmail}
-              disabled={isSending || emailSent || !email}
-              variant="outline"
-              className="w-full border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white h-12"
-            >
-              {isSending ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sending
-                  Email...
-                </>
-              ) : emailSent ? (
-                <>
-                  <CheckCircle className="w-4 h-4 mr-2 text-green-500" />{" "}
-                  Receipt Sent Successfully
-                </>
-              ) : (
-                <>
-                  <Mail className="w-4 h-4 mr-2" /> Email Me A Copy (
-                  {email || "No Email"})
-                </>
-              )}
-            </Button>
           </div>
+
+          {/* 3. EMAIL ME BUTTON */}
+          <Button
+            onClick={handleSendEmail}
+            disabled={isSending || emailSent || !email}
+            variant="outline"
+            className="w-full border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white h-12"
+          >
+            {isSending ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sending
+                Email...
+              </>
+            ) : emailSent ? (
+              <>
+                <CheckCircle className="w-4 h-4 mr-2 text-green-500" /> Receipt
+                Sent Successfully
+              </>
+            ) : (
+              <>
+                <Mail className="w-4 h-4 mr-2" /> Email Me A Copy (
+                {email || "No Email"})
+              </>
+            )}
+          </Button>
 
           {/* Help Link */}
           <div className="text-center pt-2">
@@ -218,7 +237,7 @@ function SuccessContent() {
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
             {recommendations.map((product: any) => (
-              // 👇 CRITICAL FIX: Pass 'sales' prop here
+              // 👇 Pass 'sales' prop here so badges work
               <ProductCard key={product._id} data={product} sales={sales} />
             ))}
           </div>
