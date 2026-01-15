@@ -33,7 +33,8 @@ export async function processSquarePayment(
   cartItems: any[],
   customerInfo: { email: string; name: string },
   marketingConsent: boolean,
-  taxRate: number
+  taxRate: number,
+  deliveryMethod: string // 👈 NEW: Accept method (Ship/Pickup)
 ) {
   try {
     // --- 1. SECURITY: Re-Fetch Data ---
@@ -78,12 +79,11 @@ export async function processSquarePayment(
       };
     });
 
-    // --- 3. Create Order (WITH FIXED STRUCTURE) ---
+    // --- 3. Create Order (SIMPLIFIED) ---
     const orderResponse = await square.orders.create({
       order: {
         locationId: process.env.NEXT_PUBLIC_SQUARE_LOCATION_ID!,
         lineItems: lineItems,
-        // A. Tax
         taxes: [
           {
             name: "Sales Tax",
@@ -91,19 +91,7 @@ export async function processSquarePayment(
             scope: "ORDER",
           },
         ],
-        // B. Fulfillments (FIXED: Recipient must be inside pickupDetails)
-        fulfillments: [
-          {
-            type: "PICKUP",
-            state: "PROPOSED",
-            pickupDetails: {
-              recipient: {
-                displayName: customerInfo.name,
-                emailAddress: customerInfo.email,
-              },
-            },
-          },
-        ],
+        // ❌ REMOVED strict 'fulfillments' block to stop the Pickup Time error
       },
       idempotencyKey: randomUUID(),
     });
@@ -115,14 +103,13 @@ export async function processSquarePayment(
       sourceId: token,
       idempotencyKey: randomUUID(),
       amountMoney: {
-        // Square has now automatically added the tax to this total
         amount: orderResponse.order.totalMoney?.amount ?? BigInt(0),
         currency: "USD" as const,
       },
       orderId: orderResponse.order.id,
       buyerEmailAddress: customerInfo.email,
-      // C. Add Name to Note
-      note: `Customer: ${customerInfo.name}`,
+      // 👇 Add Delivery Method to the Note so Owner knows
+      note: `Customer: ${customerInfo.name} | Method: ${deliveryMethod.toUpperCase()}`,
     });
 
     // --- 5. Update Inventory & Marketing ---
@@ -142,12 +129,9 @@ export async function processSquarePayment(
 
     // --- 6. Send Receipt ---
     try {
-      // Check if Resend Key Exists before crashing
       if (process.env.RESEND_API_KEY) {
         const sanitizedOrder = sanitizeForEmail(orderResponse.order);
         await sendReceiptEmail(customerInfo.email, sanitizedOrder, cartItems);
-      } else {
-        console.warn("RESEND_API_KEY missing. Receipt email skipped.");
       }
     } catch (emailErr) {
       console.error("Auto-Receipt Failed:", emailErr);

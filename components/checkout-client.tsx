@@ -161,13 +161,14 @@ export default function CheckoutClient({
       const token = paymentResult.token!;
       const fullName = `${firstName} ${lastName}`.trim();
 
-      // 2. Send Token + Name + TaxRate to Server
+      // 2. Send Token + Name + Tax + DeliveryMethod to Server
       const charge = await processSquarePayment(
         token,
         items,
-        { email, name: fullName }, // 👈 Pass name object
+        { email, name: fullName },
         marketingConsent,
-        activeSettings.taxRate // 👈 Pass tax rate
+        activeSettings.taxRate,
+        deliveryMethod // 👈 PASS "ship" OR "pickup" HERE
       );
 
       if (charge.success && charge.payment) {
