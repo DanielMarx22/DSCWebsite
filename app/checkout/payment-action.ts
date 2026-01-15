@@ -28,36 +28,48 @@ const sanitizeForEmail = (data: any) => {
   );
 };
 
+// 👇 Define the Address Type
+interface ShippingAddress {
+  addressLine1: string;
+  city: string;
+  state: string;
+  postalCode: string;
+}
+
 export async function processSquarePayment(
   token: string,
   cartItems: any[],
   customerInfo: { email: string; name: string },
   marketingConsent: boolean,
   taxRate: number,
-  deliveryMethod: string // 👈 NEW: Accept method (Ship/Pickup)
+  deliveryMethod: string,
+  shippingAddress?: ShippingAddress // 👈 NEW ARGUMENT
 ) {
   try {
-    // --- 1. SECURITY: Re-Fetch Data ---
-    const productIds = cartItems.map((item) => item.id);
+    // --- 1. SECURITY CHECKS ---
+    if (!cartItems || cartItems.length === 0) throw new Error("Cart is empty");
 
+    // Check stock
+    const productIds = cartItems.map((item) => item.id);
     const [serverProducts, activeSales] = await Promise.all([
       sanityWrite.fetch<any[]>(
-        `*[_type == "product" && _id in $ids]{
-                _id, 
-                title, 
-                price, 
-                category, 
-                tags
-            }`,
+        `*[_type == "product" && _id in $ids]{ _id, title, price, category, tags, inventory }`,
         { ids: productIds }
       ),
       sanityWrite.fetch<Sale[]>(`*[_type == "sale" && isActive == true]`),
     ]);
 
-    // --- 2. Build Line Items ---
+    // Validate Inventory & Build Line Items
     const lineItems = cartItems.map((cartItem) => {
       const product = serverProducts.find((p) => p._id === cartItem.id);
       if (!product) throw new Error(`Product not found: ${cartItem.name}`);
+
+      // Stop overselling
+      if (product.inventory < cartItem.quantity) {
+        throw new Error(
+          `Sorry, we only have ${product.inventory} of ${product.title} left.`
+        );
+      }
 
       const { salePrice } = calculateSalePrice(
         {
@@ -79,26 +91,48 @@ export async function processSquarePayment(
       };
     });
 
-    // --- 3. Create Order (SIMPLIFIED) ---
+    // --- 2. BUILD FULFILLMENT (Shipping vs Pickup) ---
+    const fulfillments: any[] = [];
+
+    if (deliveryMethod === "ship" && shippingAddress) {
+      // Create an official SHIPMENT object for Square
+      fulfillments.push({
+        type: "SHIPMENT",
+        state: "PROPOSED",
+        shipmentDetails: {
+          recipient: {
+            displayName: customerInfo.name,
+            emailAddress: customerInfo.email,
+          },
+          address: {
+            addressLine1: shippingAddress.addressLine1,
+            locality: shippingAddress.city,
+            administrativeDistrictLevel1: shippingAddress.state,
+            postalCode: shippingAddress.postalCode,
+            country: "US",
+          },
+        },
+      });
+    }
+    // We intentionally do NOT add a fulfillment for "Pickup" to avoid strict time errors.
+    // Pickup is handled via the "Note" field below.
+
+    // --- 3. CREATE ORDER ---
     const orderResponse = await square.orders.create({
       order: {
         locationId: process.env.NEXT_PUBLIC_SQUARE_LOCATION_ID!,
         lineItems: lineItems,
         taxes: [
-          {
-            name: "Sales Tax",
-            percentage: taxRate.toString(),
-            scope: "ORDER",
-          },
+          { name: "Sales Tax", percentage: taxRate.toString(), scope: "ORDER" },
         ],
-        // ❌ REMOVED strict 'fulfillments' block to stop the Pickup Time error
+        fulfillments: fulfillments, // 👈 Attach the shipment info
       },
       idempotencyKey: randomUUID(),
     });
 
     if (!orderResponse.order?.id) throw new Error("Failed to create order.");
 
-    // --- 4. Process Payment ---
+    // --- 4. PROCESS PAYMENT ---
     const paymentResponse = await square.payments.create({
       sourceId: token,
       idempotencyKey: randomUUID(),
@@ -108,11 +142,14 @@ export async function processSquarePayment(
       },
       orderId: orderResponse.order.id,
       buyerEmailAddress: customerInfo.email,
-      // 👇 Add Delivery Method to the Note so Owner knows
-      note: `Customer: ${customerInfo.name} | Method: ${deliveryMethod.toUpperCase()}`,
+      // Add Note for Pickup or Shipping context
+      note:
+        deliveryMethod === "pickup"
+          ? `PICKUP ORDER - Customer: ${customerInfo.name}`
+          : `SHIP TO: ${shippingAddress?.addressLine1}, ${shippingAddress?.city}, ${shippingAddress?.state}`,
     });
 
-    // --- 5. Update Inventory & Marketing ---
+    // --- 5. UPDATE INVENTORY ---
     await Promise.allSettled([
       ...cartItems.map((item) =>
         sanityWrite.patch(item.id).dec({ inventory: item.quantity }).commit()
@@ -127,7 +164,7 @@ export async function processSquarePayment(
         : Promise.resolve(),
     ]);
 
-    // --- 6. Send Receipt ---
+    // --- 6. SEND EMAIL ---
     try {
       if (process.env.RESEND_API_KEY) {
         const sanitizedOrder = sanitizeForEmail(orderResponse.order);

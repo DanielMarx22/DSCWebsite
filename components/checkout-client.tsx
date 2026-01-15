@@ -8,7 +8,15 @@ import { useCartStore } from "@/store/cart-store";
 import { ProductCard } from "@/components/product-card";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import { Truck, Store, AlertCircle, CalendarDays, Info } from "lucide-react"; // 👈 Added Info
+// 👇 ADDED: MapPin and Info icons
+import {
+  Truck,
+  Store,
+  AlertCircle,
+  CalendarDays,
+  MapPin,
+  Info,
+} from "lucide-react";
 import { DayPicker } from "react-day-picker";
 import { getSimilarProducts } from "@/app/actions/get-similar-products";
 import {
@@ -32,7 +40,7 @@ interface CheckoutSettings {
   pickupWarning: string;
   flatRateShipping: number;
   taxRate: number;
-  // 👇 NEW FIELDS
+  // 👇 NEW: Notes from Sanity
   restrictionNote?: string;
   shippingNote?: string;
 }
@@ -64,11 +72,17 @@ export default function CheckoutClient({
     "ship"
   );
 
-  // NEW: Name State
+  // 👇 NEW: Name State
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [marketingConsent, setMarketingConsent] = useState(false);
+
+  // 👇 NEW: Shipping Address State
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
+  const [zip, setZip] = useState("");
 
   useEffect(() => {
     const fetchRecs = async () => {
@@ -143,14 +157,32 @@ export default function CheckoutClient({
   const estimatedTax = subtotal * (activeSettings.taxRate / 100);
   const total = subtotal + shipping + estimatedTax;
 
-  // Updated Validation
+  // 👇 UPDATED: Validation Logic (Added Name & Address checks)
   const isFormValid = useMemo(() => {
     if (items.length === 0) return false;
     if (!email || !email.includes("@")) return false;
-    if (!firstName || !lastName) return false; // 👈 Check names
-    if (deliveryMethod === "ship" && !selectedDate) return false;
+    if (!firstName || !lastName) return false; // Name check
+
+    // Address Check (only if shipping)
+    if (deliveryMethod === "ship") {
+      if (!address || !city || !state || !zip || !selectedDate) return false;
+    }
+
+    // If pickup, we don't need address/date check (pickup is implicit)
+    // NOTE: Your original code required date for shipping, keeping that logic.
     return true;
-  }, [items, email, firstName, lastName, deliveryMethod, selectedDate]);
+  }, [
+    items,
+    email,
+    firstName,
+    lastName,
+    deliveryMethod,
+    selectedDate,
+    address,
+    city,
+    state,
+    zip,
+  ]);
 
   const handlePlaceOrder = async () => {
     setIsProcessing(true);
@@ -165,16 +197,28 @@ export default function CheckoutClient({
       }
 
       const token = paymentResult.token!;
-      const fullName = `${firstName} ${lastName}`.trim();
 
-      // 2. Send Token + Name + Tax + DeliveryMethod to Server
+      // 👇 Prepare Name & Address
+      const fullName = `${firstName} ${lastName}`.trim();
+      const shippingAddress =
+        deliveryMethod === "ship"
+          ? {
+              addressLine1: address,
+              city,
+              state,
+              postalCode: zip,
+            }
+          : undefined;
+
+      // 👇 Pass new arguments to Server Action
       const charge = await processSquarePayment(
         token,
         items,
         { email, name: fullName },
         marketingConsent,
         activeSettings.taxRate,
-        deliveryMethod // 👈 PASS "ship" OR "pickup" HERE
+        deliveryMethod,
+        shippingAddress
       );
 
       if (charge.success && charge.payment) {
@@ -214,7 +258,7 @@ export default function CheckoutClient({
           <section className="space-y-4">
             <h2 className="text-xl font-bold text-white">Contact Info</h2>
             <div className="bg-gray-900/50 border border-gray-800 p-6 rounded-2xl space-y-4">
-              {/* NEW: Name Inputs */}
+              {/* 👇 NEW: Name Inputs */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label
@@ -296,9 +340,9 @@ export default function CheckoutClient({
               }}
               className="grid grid-cols-1 md:grid-cols-2 gap-4"
             >
-              {/* 👇 UPDATED SHIP CARD */}
               <Label
                 htmlFor="ship"
+                // 👇 Changed class to flex-col to accommodate note
                 className={`flex flex-col p-4 border rounded-xl cursor-pointer transition-all ${deliveryMethod === "ship" ? "border-blue-500 bg-blue-500/10 ring-1 ring-blue-500" : "border-gray-800 bg-gray-900/50"}`}
               >
                 <div className="flex items-center justify-between w-full mb-1">
@@ -310,7 +354,7 @@ export default function CheckoutClient({
                   </div>
                   <Truck className="w-5 h-5 text-blue-400" />
                 </div>
-                {/* 👇 RESTRICTION NOTE */}
+                {/* 👇 NEW: Restriction Note */}
                 {activeSettings.restrictionNote && (
                   <span className="text-xs text-blue-300 pl-7">
                     {activeSettings.restrictionNote}
@@ -332,6 +376,71 @@ export default function CheckoutClient({
               </Label>
             </RadioGroup>
 
+            {/* 👇 NEW: Shipping Address Form (Only shows if shipping) */}
+            {deliveryMethod === "ship" && (
+              <div className="bg-gray-900/50 border border-gray-800 p-6 rounded-2xl space-y-4 animate-in fade-in zoom-in duration-300">
+                <div className="flex items-center gap-2 text-blue-400 font-bold border-b border-gray-800 pb-2 mb-2">
+                  <MapPin className="w-4 h-4" /> Shipping Address
+                </div>
+                <div>
+                  <Label htmlFor="address" className="text-gray-300 mb-2 block">
+                    Address Line 1
+                  </Label>
+                  <input
+                    id="address"
+                    type="text"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    placeholder="123 Coral Way"
+                    className="w-full bg-gray-950 border border-gray-800 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-600 outline-none"
+                  />
+                </div>
+                <div className="grid grid-cols-6 gap-4">
+                  <div className="col-span-3">
+                    <Label htmlFor="city" className="text-gray-300 mb-2 block">
+                      City
+                    </Label>
+                    <input
+                      id="city"
+                      type="text"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      placeholder="Mobile"
+                      className="w-full bg-gray-950 border border-gray-800 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-600 outline-none"
+                    />
+                  </div>
+                  <div className="col-span-1">
+                    <Label htmlFor="state" className="text-gray-300 mb-2 block">
+                      State
+                    </Label>
+                    <input
+                      id="state"
+                      type="text"
+                      value={state}
+                      onChange={(e) => setState(e.target.value)}
+                      placeholder="AL"
+                      maxLength={2}
+                      className="w-full bg-gray-950 border border-gray-800 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-600 outline-none uppercase text-center"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <Label htmlFor="zip" className="text-gray-300 mb-2 block">
+                      Zip Code
+                    </Label>
+                    <input
+                      id="zip"
+                      type="text"
+                      value={zip}
+                      onChange={(e) => setZip(e.target.value)}
+                      placeholder="36608"
+                      maxLength={5}
+                      className="w-full bg-gray-950 border border-gray-800 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-600 outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="p-6 bg-gray-900/50 border border-gray-800 rounded-2xl">
               {deliveryMethod === "pickup" ? (
                 <div className="flex gap-3 p-4 bg-blue-900/20 border border-blue-500/30 rounded-xl text-sm">
@@ -342,7 +451,7 @@ export default function CheckoutClient({
                 </div>
               ) : (
                 <div className="calendar-dark">
-                  {/* 👇 UPDATED HEADER WITH NOTE */}
+                  {/* 👇 UPDATED: Header with Shipping Note */}
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
                     <h3 className="text-lg font-bold flex items-center gap-2 text-blue-400">
                       <CalendarDays className="w-5 h-5" /> Select Arrival Date
@@ -396,7 +505,6 @@ export default function CheckoutClient({
             </div>
           </section>
 
-          {/* 👇 RESTORED: THE "YOUR ORDER" SECTION */}
           <section className="space-y-6">
             <h2 className="text-xl font-bold text-white">Your Order</h2>
             <ul className="space-y-6">
@@ -486,6 +594,7 @@ export default function CheckoutClient({
             </ul>
           </section>
 
+          {/* PAYMENT FORM SECTION */}
           <section className="animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="p-8 border border-gray-800 bg-gray-900/60 rounded-3xl backdrop-blur-sm shadow-2xl">
               <PaymentForm
@@ -497,6 +606,7 @@ export default function CheckoutClient({
           </section>
         </div>
 
+        {/* SIDEBAR */}
         <div className="lg:w-96 flex-shrink-0">
           <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800 sticky top-24 shadow-2xl">
             <h2 className="text-xl font-bold mb-6 text-white">Order Summary</h2>
