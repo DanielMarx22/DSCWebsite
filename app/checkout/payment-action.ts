@@ -28,7 +28,6 @@ const sanitizeForEmail = (data: any) => {
   );
 };
 
-// 👇 Define the Address Type
 interface ShippingAddress {
   addressLine1: string;
   city: string;
@@ -43,28 +42,30 @@ export async function processSquarePayment(
   marketingConsent: boolean,
   taxRate: number,
   deliveryMethod: string,
-  shippingAddress?: ShippingAddress // 👈 NEW ARGUMENT
+  shippingAddress?: ShippingAddress,
+  deliveryDate?: string // 👈 NEW: Accept the date
 ) {
   try {
-    // --- 1. SECURITY CHECKS ---
+    // --- 1. SECURITY CHECKS & FETCH DATA ---
     if (!cartItems || cartItems.length === 0) throw new Error("Cart is empty");
 
-    // Check stock
     const productIds = cartItems.map((item) => item.id);
-    const [serverProducts, activeSales] = await Promise.all([
+
+    // Fetch Products, Active Sales, AND Checkout Settings (for shipping cost)
+    const [serverProducts, activeSales, settings] = await Promise.all([
       sanityWrite.fetch<any[]>(
         `*[_type == "product" && _id in $ids]{ _id, title, price, category, tags, inventory }`,
         { ids: productIds }
       ),
       sanityWrite.fetch<Sale[]>(`*[_type == "sale" && isActive == true]`),
+      sanityWrite.fetch<any>(`*[_type == "checkoutSettings"][0]`), // 👈 Get settings
     ]);
 
-    // Validate Inventory & Build Line Items
+    // --- 2. BUILD PRODUCT LINE ITEMS ---
     const lineItems = cartItems.map((cartItem) => {
       const product = serverProducts.find((p) => p._id === cartItem.id);
       if (!product) throw new Error(`Product not found: ${cartItem.name}`);
 
-      // Stop overselling
       if (product.inventory < cartItem.quantity) {
         throw new Error(
           `Sorry, we only have ${product.inventory} of ${product.title} left.`
@@ -91,11 +92,24 @@ export async function processSquarePayment(
       };
     });
 
-    // --- 2. BUILD FULFILLMENT (Shipping vs Pickup) ---
+    // --- 3. ADD SHIPPING CHARGE ---
+    if (deliveryMethod === "ship") {
+      const shippingCost = settings?.flatRateShipping || 39.99; // Fallback to 39.99 if setting missing
+
+      lineItems.push({
+        name: "Flat Rate Shipping",
+        quantity: "1",
+        basePriceMoney: {
+          amount: BigInt(Math.round(shippingCost * 100)),
+          currency: "USD" as const,
+        },
+      });
+    }
+
+    // --- 4. BUILD FULFILLMENT (With Date!) ---
     const fulfillments: any[] = [];
 
     if (deliveryMethod === "ship" && shippingAddress) {
-      // Create an official SHIPMENT object for Square
       fulfillments.push({
         type: "SHIPMENT",
         state: "PROPOSED",
@@ -111,13 +125,15 @@ export async function processSquarePayment(
             postalCode: shippingAddress.postalCode,
             country: "US",
           },
+          // 👈 OFFICIAL SQUARE FIELD FOR DELIVERY DATE
+          expectedDeliveryDate: deliveryDate
+            ? new Date(deliveryDate).toISOString()
+            : undefined,
         },
       });
     }
-    // We intentionally do NOT add a fulfillment for "Pickup" to avoid strict time errors.
-    // Pickup is handled via the "Note" field below.
 
-    // --- 3. CREATE ORDER ---
+    // --- 5. CREATE ORDER ---
     const orderResponse = await square.orders.create({
       order: {
         locationId: process.env.NEXT_PUBLIC_SQUARE_LOCATION_ID!,
@@ -125,14 +141,30 @@ export async function processSquarePayment(
         taxes: [
           { name: "Sales Tax", percentage: taxRate.toString(), scope: "ORDER" },
         ],
-        fulfillments: fulfillments, // 👈 Attach the shipment info
+        fulfillments: fulfillments,
       },
       idempotencyKey: randomUUID(),
     });
 
     if (!orderResponse.order?.id) throw new Error("Failed to create order.");
 
-    // --- 4. PROCESS PAYMENT ---
+    // --- 6. PROCESS PAYMENT ---
+    // Create a clear note for the owner
+    let noteText = "";
+    if (deliveryMethod === "pickup") {
+      noteText = `PICKUP ORDER - Customer: ${customerInfo.name}`;
+    } else {
+      noteText = `SHIP TO: ${shippingAddress?.addressLine1}, ${shippingAddress?.state}`;
+      if (deliveryDate) {
+        // Format date nicely for the note (e.g., "Jan 25")
+        const niceDate = new Date(deliveryDate).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        });
+        noteText += ` | ARRIVING: ${niceDate}`;
+      }
+    }
+
     const paymentResponse = await square.payments.create({
       sourceId: token,
       idempotencyKey: randomUUID(),
@@ -142,16 +174,15 @@ export async function processSquarePayment(
       },
       orderId: orderResponse.order.id,
       buyerEmailAddress: customerInfo.email,
-      // Add Note for Pickup or Shipping context
-      note:
-        deliveryMethod === "pickup"
-          ? `PICKUP ORDER - Customer: ${customerInfo.name}`
-          : `SHIP TO: ${shippingAddress?.addressLine1}, ${shippingAddress?.city}, ${shippingAddress?.state}`,
+      note: noteText, // 👈 Updated Note
     });
 
-    // --- 5. UPDATE INVENTORY ---
+    // --- 7. UPDATE INVENTORY ---
+    // Only decrement products, ignore the "Shipping" line item we added
+    const realProductItems = cartItems.filter((item) => item.id);
+
     await Promise.allSettled([
-      ...cartItems.map((item) =>
+      ...realProductItems.map((item) =>
         sanityWrite.patch(item.id).dec({ inventory: item.quantity }).commit()
       ),
       marketingConsent
@@ -164,7 +195,7 @@ export async function processSquarePayment(
         : Promise.resolve(),
     ]);
 
-    // --- 6. SEND EMAIL ---
+    // --- 8. SEND EMAIL ---
     try {
       if (process.env.RESEND_API_KEY) {
         const sanitizedOrder = sanitizeForEmail(orderResponse.order);

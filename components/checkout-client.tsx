@@ -197,9 +197,8 @@ export default function CheckoutClient({
       }
 
       const token = paymentResult.token!;
-
-      // 👇 Prepare Name & Address
       const fullName = `${firstName} ${lastName}`.trim();
+
       const shippingAddress =
         deliveryMethod === "ship"
           ? {
@@ -210,7 +209,7 @@ export default function CheckoutClient({
             }
           : undefined;
 
-      // 👇 Pass new arguments to Server Action
+      // 👇 PASS THE DATE HERE
       const charge = await processSquarePayment(
         token,
         items,
@@ -218,7 +217,8 @@ export default function CheckoutClient({
         marketingConsent,
         activeSettings.taxRate,
         deliveryMethod,
-        shippingAddress
+        shippingAddress,
+        selectedDate ? selectedDate.toISOString() : undefined // 👈 NEW ARGUMENT
       );
 
       if (charge.success && charge.payment) {
