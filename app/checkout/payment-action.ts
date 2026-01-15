@@ -5,7 +5,7 @@ import { randomUUID } from "crypto";
 import { createClient } from "next-sanity";
 import { apiVersion, dataset, projectId } from "@/sanity/env";
 import { calculateSalePrice, Sale } from "@/lib/sale-utils";
-import { sendReceiptEmail } from "@/app/actions/send-receipt"; // 👈 1. Import Emailer
+import { sendReceiptEmail } from "@/app/actions/send-receipt";
 
 const square = new SquareClient({
   token: process.env.SQUARE_ACCESS_TOKEN!,
@@ -20,7 +20,6 @@ const sanityWrite = createClient({
   token: process.env.SANITY_API_TOKEN,
 });
 
-// Helper to fix "BigInt" crash (Square uses BigInts, JSON hates them)
 const sanitizeForEmail = (data: any) => {
   return JSON.parse(
     JSON.stringify(data, (key, value) =>
@@ -32,11 +31,12 @@ const sanitizeForEmail = (data: any) => {
 export async function processSquarePayment(
   token: string,
   cartItems: any[],
-  email: string,
-  marketingConsent: boolean
+  customerInfo: { email: string; name: string },
+  marketingConsent: boolean,
+  taxRate: number
 ) {
   try {
-    // --- 1. SECURITY: Re-Fetch Data from Server ---
+    // --- 1. SECURITY: Re-Fetch Data ---
     const productIds = cartItems.map((item) => item.id);
 
     const [serverProducts, activeSales] = await Promise.all([
@@ -78,11 +78,32 @@ export async function processSquarePayment(
       };
     });
 
-    // --- 3. Create Order ---
+    // --- 3. Create Order (WITH FIXED STRUCTURE) ---
     const orderResponse = await square.orders.create({
       order: {
         locationId: process.env.NEXT_PUBLIC_SQUARE_LOCATION_ID!,
         lineItems: lineItems,
+        // A. Tax
+        taxes: [
+          {
+            name: "Sales Tax",
+            percentage: taxRate.toString(),
+            scope: "ORDER",
+          },
+        ],
+        // B. Fulfillments (FIXED: Recipient must be inside pickupDetails)
+        fulfillments: [
+          {
+            type: "PICKUP",
+            state: "PROPOSED",
+            pickupDetails: {
+              recipient: {
+                displayName: customerInfo.name,
+                emailAddress: customerInfo.email,
+              },
+            },
+          },
+        ],
       },
       idempotencyKey: randomUUID(),
     });
@@ -94,11 +115,14 @@ export async function processSquarePayment(
       sourceId: token,
       idempotencyKey: randomUUID(),
       amountMoney: {
+        // Square has now automatically added the tax to this total
         amount: orderResponse.order.totalMoney?.amount ?? BigInt(0),
         currency: "USD" as const,
       },
       orderId: orderResponse.order.id,
-      buyerEmailAddress: email,
+      buyerEmailAddress: customerInfo.email,
+      // C. Add Name to Note
+      note: `Customer: ${customerInfo.name}`,
     });
 
     // --- 5. Update Inventory & Marketing ---
@@ -109,21 +133,24 @@ export async function processSquarePayment(
       marketingConsent
         ? sanityWrite.create({
             _type: "subscriber",
-            email: email,
+            email: customerInfo.email,
+            name: customerInfo.name,
             joinedAt: new Date().toISOString(),
           })
         : Promise.resolve(),
     ]);
 
-    // --- 6. SEND EMAIL RECEIPT (With Images!) ---
-    // We do this server-side so it sends even if the user closes the tab immediately.
+    // --- 6. Send Receipt ---
     try {
-      const sanitizedOrder = sanitizeForEmail(orderResponse.order);
-      // 👇 Passing cartItems (3rd arg) allows the email to look up the images
-      await sendReceiptEmail(email, sanitizedOrder, cartItems);
+      // Check if Resend Key Exists before crashing
+      if (process.env.RESEND_API_KEY) {
+        const sanitizedOrder = sanitizeForEmail(orderResponse.order);
+        await sendReceiptEmail(customerInfo.email, sanitizedOrder, cartItems);
+      } else {
+        console.warn("RESEND_API_KEY missing. Receipt email skipped.");
+      }
     } catch (emailErr) {
-      console.error("Auto-Receipt Failed (Payment still worked):", emailErr);
-      // We don't throw here, because payment was successful
+      console.error("Auto-Receipt Failed:", emailErr);
     }
 
     const paymentResult = sanitizeForEmail(paymentResponse.payment);

@@ -23,7 +23,6 @@ import {
 import "react-day-picker/dist/style.css";
 import PaymentForm, { PaymentFormHandle } from "@/components/payment-form";
 import { processSquarePayment } from "@/app/checkout/payment-action";
-import { Checkbox } from "@/components/ui/checkbox"; // Assuming you have shadcn, or use standard input
 
 interface CheckoutSettings {
   allowedShippingDays: string[];
@@ -48,7 +47,7 @@ interface Product {
 interface Props {
   recommendations: Product[];
   settings: CheckoutSettings | null;
-  paymentMethods: string[]; // 👈 Passed from Sanity
+  paymentMethods: string[];
 }
 
 export default function CheckoutClient({
@@ -61,26 +60,29 @@ export default function CheckoutClient({
   const [deliveryMethod, setDeliveryMethod] = useState<"ship" | "pickup">(
     "ship"
   );
+
+  // NEW: Name State
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [marketingConsent, setMarketingConsent] = useState(false);
+
   useEffect(() => {
     const fetchRecs = async () => {
       if (items.length === 0) return;
-
       const cartIds = items.map((i) => i.id);
       const similar = await getSimilarProducts(cartIds);
-
       if (similar.length > 0) {
         setSmartRecs(similar);
       }
     };
-
     fetchRecs();
-  }, [items]); // Re-run if cart items change
+  }, [items]);
+
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
   const [selectedPaymentMethod, setSelectedPaymentMethod] =
     useState<string>("card");
   const [isProcessing, setIsProcessing] = useState(false);
-
-  // Ref to trigger the child component payment submission
   const paymentFormRef = useRef<PaymentFormHandle>(null);
 
   const activeSettings: CheckoutSettings = {
@@ -134,22 +136,20 @@ export default function CheckoutClient({
     deliveryMethod === "ship" ? activeSettings.flatRateShipping : 0;
   const estimatedTax = subtotal * (activeSettings.taxRate / 100);
   const total = subtotal + shipping + estimatedTax;
-  const [email, setEmail] = useState("");
-  const [marketingConsent, setMarketingConsent] = useState(false);
 
-  // Validation: Button is only active if these pass
+  // Updated Validation
   const isFormValid = useMemo(() => {
     if (items.length === 0) return false;
-    if (!email || !email.includes("@")) return false; // 👈 Add this check
+    if (!email || !email.includes("@")) return false;
+    if (!firstName || !lastName) return false; // 👈 Check names
     if (deliveryMethod === "ship" && !selectedDate) return false;
     return true;
-  }, [items, email, deliveryMethod, selectedDate]);
+  }, [items, email, firstName, lastName, deliveryMethod, selectedDate]);
 
   const handlePlaceOrder = async () => {
     setIsProcessing(true);
 
     try {
-      // 1. Trigger Tokenization in Child Component
       const paymentResult = await paymentFormRef.current?.submitPayment();
 
       if (!paymentResult || paymentResult.error) {
@@ -159,19 +159,18 @@ export default function CheckoutClient({
       }
 
       const token = paymentResult.token!;
+      const fullName = `${firstName} ${lastName}`.trim();
 
-      // 2. Send Token to Server Action
-      // Pass the new boolean to the server action
+      // 2. Send Token + Name + TaxRate to Server
       const charge = await processSquarePayment(
         token,
         items,
-        email,
-        marketingConsent
-      ); // 👈 Pass consent
+        { email, name: fullName }, // 👈 Pass name object
+        marketingConsent,
+        activeSettings.taxRate // 👈 Pass tax rate
+      );
 
       if (charge.success && charge.payment) {
-        // FIX: Check if payment exists
-        // Redirect to success page
         window.location.href = `/checkout/success?orderId=${charge.payment.id}`;
       } else {
         alert("Transaction Declined: " + (charge.error || "Unknown error"));
@@ -204,10 +203,46 @@ export default function CheckoutClient({
 
       <div className="flex flex-col lg:flex-row gap-12">
         <div className="flex-1 space-y-10">
-          {/* NEW: Contact Info Section */}
+          {/* Contact Info Section */}
           <section className="space-y-4">
             <h2 className="text-xl font-bold text-white">Contact Info</h2>
             <div className="bg-gray-900/50 border border-gray-800 p-6 rounded-2xl space-y-4">
+              {/* NEW: Name Inputs */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label
+                    htmlFor="firstName"
+                    className="text-gray-300 mb-2 block"
+                  >
+                    First Name
+                  </Label>
+                  <input
+                    id="firstName"
+                    type="text"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    placeholder="Jane"
+                    className="w-full bg-gray-950 border border-gray-800 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-600 outline-none"
+                  />
+                </div>
+                <div>
+                  <Label
+                    htmlFor="lastName"
+                    className="text-gray-300 mb-2 block"
+                  >
+                    Last Name
+                  </Label>
+                  <input
+                    id="lastName"
+                    type="text"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    placeholder="Doe"
+                    className="w-full bg-gray-950 border border-gray-800 text-white rounded-lg p-3 focus:ring-2 focus:ring-blue-600 outline-none"
+                  />
+                </div>
+              </div>
+
               <div>
                 <Label htmlFor="email" className="text-gray-300 mb-2 block">
                   Email Address (for receipt)
@@ -222,7 +257,6 @@ export default function CheckoutClient({
                 />
               </div>
 
-              {/* 👇 NEW: Marketing Checkbox */}
               <div className="flex items-start space-x-3 pt-2">
                 <div className="flex items-center h-6">
                   <input
@@ -240,9 +274,6 @@ export default function CheckoutClient({
                   >
                     Keep me updated on new arrivals and exclusive offers
                   </label>
-                  <p className="text-gray-500 text-xs mt-1">
-                    We promise not to spam. You can unsubscribe at any time.
-                  </p>
                 </div>
               </div>
             </div>
@@ -297,7 +328,6 @@ export default function CheckoutClient({
                   <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-blue-400">
                     <CalendarDays className="w-5 h-5" /> Select Arrival Date
                   </h3>
-                  {/* MOBILE FIX: Changed p-6 to p-2 sm:p-6 and added overflow-x-auto */}
                   <div className="flex justify-center bg-transparent p-2 sm:p-6 rounded-xl border border-gray-800 shadow-inner overflow-x-auto">
                     <DayPicker
                       mode="single"
@@ -346,16 +376,13 @@ export default function CheckoutClient({
                 <li
                   key={item.id}
                   onClick={() => {
-                    // Fallback to 'all' if uncategorized to prevent broken link
                     const categoryPath =
                       item.category === "uncategorized" ? "all" : item.category;
-                    if (item.slug) {
+                    if (item.slug)
                       router.push(`/products/${categoryPath}/${item.slug}`);
-                    }
                   }}
                   className="group relative flex gap-4 sm:gap-6 border-b border-gray-800 pb-6 items-center hover:bg-white/[0.03] cursor-pointer transition-colors rounded-xl p-2"
                 >
-                  {/* Product Image */}
                   <div className="relative h-24 w-24 flex-shrink-0 overflow-hidden rounded-xl border border-gray-800 bg-gray-900">
                     <Image
                       src={item.imageUrl || ""}
@@ -372,21 +399,17 @@ export default function CheckoutClient({
                         {item.name}
                       </h3>
                       <div className="text-sm mb-2 font-medium">
-                        {/* If original price exists and is higher, show it crossed out */}
                         {item.originalPrice &&
                           item.originalPrice > item.price && (
                             <span className="text-gray-500 line-through mr-2">
                               ${item.originalPrice.toFixed(2)}
                             </span>
                           )}
-
-                        {/* The actual sale price */}
                         <span className="text-gray-300">
                           ${item.price.toFixed(2)} x {item.quantity}
                         </span>
                       </div>
 
-                      {/* QUANTITY CONTROLS */}
                       <div className="flex items-center gap-3 bg-gray-900 border border-gray-800 w-fit rounded-lg px-2 py-1">
                         <button
                           type="button"
@@ -435,10 +458,8 @@ export default function CheckoutClient({
             </ul>
           </section>
 
-          {/* PAYMENT FORM SECTION */}
           <section className="animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="p-8 border border-gray-800 bg-gray-900/60 rounded-3xl backdrop-blur-sm shadow-2xl">
-              {/* We pass the ref so the sidebar button can trigger this */}
               <PaymentForm
                 ref={paymentFormRef}
                 allowedMethods={paymentMethods}
@@ -448,7 +469,6 @@ export default function CheckoutClient({
           </section>
         </div>
 
-        {/* SIDEBAR */}
         <div className="lg:w-96 flex-shrink-0">
           <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800 sticky top-24 shadow-2xl">
             <h2 className="text-xl font-bold mb-6 text-white">Order Summary</h2>
@@ -462,7 +482,7 @@ export default function CheckoutClient({
                 <span>${shipping.toFixed(2)}</span>
               </div>
               <div className="flex justify-between">
-                <span>Taxes</span>
+                <span>Taxes ({activeSettings.taxRate}%)</span>
                 <span>${estimatedTax.toFixed(2)}</span>
               </div>
               <div className="border-t border-gray-800 pt-4 flex justify-between text-white font-bold text-2xl">
@@ -471,7 +491,6 @@ export default function CheckoutClient({
               </div>
             </div>
 
-            {/* NEW PAY BUTTON - Logic controlled here */}
             <button
               onClick={handlePlaceOrder}
               disabled={!isFormValid || isProcessing}
@@ -505,7 +524,6 @@ export default function CheckoutClient({
               : "You Might Also Like"}
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8">
-            {/* Prioritize Smart Recs, fallback to Initial Recs */}
             {(smartRecs.length > 0 ? smartRecs : initialRecs).map((product) => (
               <ProductCard key={product._id} data={product} />
             ))}

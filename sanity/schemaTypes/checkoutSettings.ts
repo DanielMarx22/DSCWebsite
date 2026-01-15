@@ -25,25 +25,27 @@ export const checkoutSettings = defineType({
         ],
         layout: "grid",
       },
-      initialValue: ["1", "2", "3"], // Default to Mon-Wed
-      validation: (Rule) => Rule.required().min(1).error("Select at least one shipping day."),
+      initialValue: ["1", "2", "3"],
+      validation: (Rule) =>
+        Rule.required().min(1).error("Select at least one shipping day."),
     }),
     defineField({
       name: "blackoutDates",
       title: "Blackout Dates",
-      description: "Add specific dates when shipping is unavailable (e.g., holidays).",
+      description:
+        "Add specific dates when shipping is unavailable (e.g., holidays).",
       type: "array",
       of: [{ type: "date", options: { dateFormat: "YYYY-MM-DD" } }],
     }),
     defineField({
       name: "maxBookingWindowDays",
       title: "Maximum Booking Window (Days)",
-      description: "How many days into the future can a customer select a shipping date?",
+      description:
+        "How many days into the future can a customer select a shipping date?",
       type: "number",
       initialValue: 30,
       validation: (Rule) => Rule.required().min(7).max(120),
     }),
-    // Keep the existing fields for store pickup, etc.
     defineField({
       name: "pickupWarning",
       title: "Store Pickup Warning",
@@ -55,10 +57,15 @@ export const checkoutSettings = defineType({
       title: "Flat Rate Shipping Cost ($)",
       type: "number",
     }),
+    // 👇 POLISHED TAX FIELD
     defineField({
       name: "taxRate",
-      title: "Default Tax Rate (%)",
+      title: "Sales Tax Rate (%)",
+      description:
+        "Enter the percentage (e.g. enter 9 for 9%). This will be added to the total at checkout.",
       type: "number",
+      initialValue: 0,
+      validation: (Rule) => Rule.min(0).max(100),
     }),
   ],
 });
