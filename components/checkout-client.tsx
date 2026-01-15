@@ -8,7 +8,7 @@ import { useCartStore } from "@/store/cart-store";
 import { ProductCard } from "@/components/product-card";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import { Truck, Store, AlertCircle, CalendarDays } from "lucide-react";
+import { Truck, Store, AlertCircle, CalendarDays, Info } from "lucide-react"; // 👈 Added Info
 import { DayPicker } from "react-day-picker";
 import { getSimilarProducts } from "@/app/actions/get-similar-products";
 import {
@@ -32,6 +32,9 @@ interface CheckoutSettings {
   pickupWarning: string;
   flatRateShipping: number;
   taxRate: number;
+  // 👇 NEW FIELDS
+  restrictionNote?: string;
+  shippingNote?: string;
 }
 
 interface Product {
@@ -94,6 +97,9 @@ export default function CheckoutClient({
       settings?.pickupWarning || "Pickup is available at our store location.",
     flatRateShipping: settings?.flatRateShipping ?? 39.99,
     taxRate: settings?.taxRate ?? 0,
+    // 👇 Map new notes
+    restrictionNote: settings?.restrictionNote,
+    shippingNote: settings?.shippingNote,
   };
 
   const router = useRouter();
@@ -290,18 +296,28 @@ export default function CheckoutClient({
               }}
               className="grid grid-cols-1 md:grid-cols-2 gap-4"
             >
+              {/* 👇 UPDATED SHIP CARD */}
               <Label
                 htmlFor="ship"
-                className={`flex items-center justify-between p-4 border rounded-xl cursor-pointer transition-all ${deliveryMethod === "ship" ? "border-blue-500 bg-blue-500/10 ring-1 ring-blue-500" : "border-gray-800 bg-gray-900/50"}`}
+                className={`flex flex-col p-4 border rounded-xl cursor-pointer transition-all ${deliveryMethod === "ship" ? "border-blue-500 bg-blue-500/10 ring-1 ring-blue-500" : "border-gray-800 bg-gray-900/50"}`}
               >
-                <div className="flex items-center gap-3">
-                  <RadioGroupItem value="ship" id="ship" />
-                  <span className="font-semibold text-white text-base">
-                    Ship
-                  </span>
+                <div className="flex items-center justify-between w-full mb-1">
+                  <div className="flex items-center gap-3">
+                    <RadioGroupItem value="ship" id="ship" />
+                    <span className="font-semibold text-white text-base">
+                      Ship
+                    </span>
+                  </div>
+                  <Truck className="w-5 h-5 text-blue-400" />
                 </div>
-                <Truck className="w-5 h-5 text-blue-400" />
+                {/* 👇 RESTRICTION NOTE */}
+                {activeSettings.restrictionNote && (
+                  <span className="text-xs text-blue-300 pl-7">
+                    {activeSettings.restrictionNote}
+                  </span>
+                )}
               </Label>
+
               <Label
                 htmlFor="pickup"
                 className={`flex items-center justify-between p-4 border rounded-xl cursor-pointer transition-all ${deliveryMethod === "pickup" ? "border-blue-500 bg-blue-500/10 ring-1 ring-blue-500" : "border-gray-800 bg-gray-900/50"}`}
@@ -326,9 +342,19 @@ export default function CheckoutClient({
                 </div>
               ) : (
                 <div className="calendar-dark">
-                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-blue-400">
-                    <CalendarDays className="w-5 h-5" /> Select Arrival Date
-                  </h3>
+                  {/* 👇 UPDATED HEADER WITH NOTE */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
+                    <h3 className="text-lg font-bold flex items-center gap-2 text-blue-400">
+                      <CalendarDays className="w-5 h-5" /> Select Arrival Date
+                    </h3>
+                    {activeSettings.shippingNote && (
+                      <div className="flex items-center gap-2 text-xs text-gray-400 bg-gray-900 px-3 py-1 rounded-full border border-gray-800">
+                        <Info className="w-3 h-3 text-blue-400" />
+                        {activeSettings.shippingNote}
+                      </div>
+                    )}
+                  </div>
+
                   <div className="flex justify-center bg-transparent p-2 sm:p-6 rounded-xl border border-gray-800 shadow-inner overflow-x-auto">
                     <DayPicker
                       mode="single"
@@ -370,6 +396,7 @@ export default function CheckoutClient({
             </div>
           </section>
 
+          {/* 👇 RESTORED: THE "YOUR ORDER" SECTION */}
           <section className="space-y-6">
             <h2 className="text-xl font-bold text-white">Your Order</h2>
             <ul className="space-y-6">
