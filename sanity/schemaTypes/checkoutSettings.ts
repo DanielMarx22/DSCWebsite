@@ -52,12 +52,25 @@ export const checkoutSettings = defineType({
       type: "text",
       rows: 3,
     }),
+    // 👇 ADDED MISSING FIELD 1
+    defineField({
+      name: "restrictionNote",
+      title: "Shipping Restriction Note",
+      description: "e.g. 'Shipping to Lower 48 States only.'",
+      type: "string",
+    }),
+    // 👇 ADDED MISSING FIELD 2
+    defineField({
+      name: "shippingNote",
+      title: "General Shipping Note",
+      description: "e.g. 'We only ship Monday-Wednesday via FedEx Overnight.'",
+      type: "string",
+    }),
     defineField({
       name: "flatRateShipping",
       title: "Flat Rate Shipping Cost ($)",
       type: "number",
     }),
-    // 👇 POLISHED TAX FIELD
     defineField({
       name: "taxRate",
       title: "Sales Tax Rate (%)",
