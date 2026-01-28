@@ -15,6 +15,9 @@ import { Button } from "./ui/button";
 
 export const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState<boolean>(false);
+  // 👇 NEW: State to toggle the mobile search bar
+  const [mobileSearchOpen, setMobileSearchOpen] = useState<boolean>(false);
+
   const { items } = useCartStore();
   const cartCount = items.reduce((acc, item) => acc + item.quantity, 0);
   const router = useRouter();
@@ -33,6 +36,7 @@ export const Navbar = () => {
     const handleResize = () => {
       if (window.innerWidth >= 768) {
         setMobileOpen(false);
+        setMobileSearchOpen(false); // Close mobile search on resize too
       }
     };
     window.addEventListener("resize", handleResize);
@@ -42,7 +46,11 @@ export const Navbar = () => {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery.trim()) return;
+
+    // Close mobile menus on search
     setMobileOpen(false);
+    setMobileSearchOpen(false);
+
     router.push(`/search?query=${encodeURIComponent(searchQuery)}`);
   };
 
@@ -55,7 +63,10 @@ export const Navbar = () => {
           <Button
             variant="ghost"
             className="md:hidden text-white hover:bg-white/10 p-2"
-            onClick={() => setMobileOpen((prev) => !prev)}
+            onClick={() => {
+              setMobileOpen((prev) => !prev);
+              setMobileSearchOpen(false); // Close search if opening menu
+            }}
             aria-label="Toggle Menu"
           >
             {mobileOpen ? (
@@ -69,7 +80,6 @@ export const Navbar = () => {
         {/* CENTER: LOGO (Desktop) */}
         <div className="hidden md:block absolute left-1/2 transform -translate-x-1/2">
           <Link href="/" className="flex items-center gap-3 group">
-            {/* 🖼️ LOGO IMAGE (w-10 h-10) */}
             <div className="relative w-10 h-10 transition-transform duration-300 group-hover:scale-110">
               <Image
                 src="/favicon.ico"
@@ -78,7 +88,6 @@ export const Navbar = () => {
                 className="object-contain"
               />
             </div>
-            {/* 🎨 COLORED TEXT (text-2xl) */}
             <span className="text-2xl font-extrabold tracking-tight whitespace-nowrap">
               Down South{" "}
               <span className="text-blue-500 group-hover:text-blue-400 transition-colors">
@@ -122,17 +131,21 @@ export const Navbar = () => {
             <MagnifyingGlassIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500 pointer-events-none group-focus-within:text-blue-500" />
           </form>
 
-          {/* MOBILE SEARCH ICON */}
+          {/* MOBILE SEARCH ICON (UPDATED: No more prompt!) */}
           <Button
             variant="ghost"
             className="md:hidden text-white hover:bg-white/10 p-2"
             onClick={() => {
-              const term = prompt("Search for products:");
-              if (term)
-                router.push(`/search?query=${encodeURIComponent(term)}`);
+              setMobileSearchOpen((prev) => !prev);
+              setMobileOpen(false); // Close menu if opening search
             }}
           >
-            <MagnifyingGlassIcon className="h-6 w-6" />
+            {/* Toggle icon based on state if you want, or keep glass */}
+            {mobileSearchOpen ? (
+              <XMarkIcon className="h-6 w-6" />
+            ) : (
+              <MagnifyingGlassIcon className="h-6 w-6" />
+            )}
           </Button>
 
           {/* CART ICON */}
@@ -157,16 +170,36 @@ export const Navbar = () => {
             <Link
               key={item.name}
               href={item.href}
-              // ✅ UPDATED: Changed text-base to text-lg
               className="relative text-lg font-medium text-gray-300 hover:text-white transition-colors group"
             >
               {item.name}
-              {/* ✨ Cool Underline Hover Effect */}
               <span className="absolute -bottom-2 left-0 w-0 h-[2px] bg-blue-500 transition-all duration-300 group-hover:w-full"></span>
             </Link>
           ))}
         </div>
       </div>
+
+      {/* ✅ NEW: MOBILE SEARCH BAR (Slides down under navbar) */}
+      {mobileSearchOpen && (
+        <div className="md:hidden absolute top-[100%] left-0 w-full bg-black/95 backdrop-blur-xl border-t border-b border-white/10 py-4 px-6 shadow-2xl animate-in slide-in-from-top-5 duration-200">
+          <form onSubmit={handleSearch} className="relative">
+            <input
+              type="text"
+              placeholder="Search products..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              autoFocus
+              className="w-full bg-gray-900 border border-gray-700 text-white rounded-full py-3 px-5 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            />
+            <button
+              type="submit"
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-2 bg-blue-600 rounded-full text-white"
+            >
+              <MagnifyingGlassIcon className="h-4 w-4" />
+            </button>
+          </form>
+        </div>
+      )}
 
       {/* MOBILE MENU */}
       {mobileOpen && (

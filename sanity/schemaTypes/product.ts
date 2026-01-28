@@ -32,7 +32,6 @@ export default defineType({
       type: "number",
       initialValue: 0,
     }),
-    // 👇 THIS IS THE ARRAY WE FIXED EARLIER
     defineField({
       name: "images",
       title: "Product Images",
@@ -81,7 +80,6 @@ export default defineType({
       hidden: true,
     }),
 
-    // 2. Hide the old Single Image (Junk data, but easier to hide than delete)
     defineField({
       name: "image",
       title: "Legacy Image",
@@ -93,7 +91,6 @@ export default defineType({
   preview: {
     select: {
       title: "title",
-      // 👇 CHANGE 1: Grab the entire array, not just the first item
       images: "images",
       price: "price",
     },
@@ -102,7 +99,6 @@ export default defineType({
       return {
         title,
         subtitle: price ? `$${price}` : "Price not set",
-        // 👇 CHANGE 2: Manually check if the list exists and pick the first one
         media: images && images[0] ? images[0] : null,
       };
     },

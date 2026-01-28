@@ -5,7 +5,6 @@ import { PortableText } from "@portabletext/react";
 import ProductControls from "@/components/product-controls";
 import { calculateSalePrice, Sale } from "@/lib/sale-utils";
 
-// ✅ GLOBAL CURRENCY FORMATTER
 const formatMoney = (amount: number) => {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
