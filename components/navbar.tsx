@@ -22,6 +22,9 @@ export const Navbar = () => {
   const router = useRouter();
 
   const pathname = usePathname();
+  // 👇 REMOVED: We don't need to check isStudio anymore because CSS handles the z-index
+  // const isStudio = pathname?.startsWith("/studio");
+
   const [searchQuery, setSearchQuery] = useState("");
 
   const mainMenuItems = [
@@ -32,10 +35,6 @@ export const Navbar = () => {
     { name: "Supplies", href: "/products/supplies" },
     { name: "Aquariums", href: "/products/aquariums" },
   ];
-
-  if (pathname && pathname.startsWith("/studio")) {
-    return null;
-  }
 
   useEffect(() => {
     const handleResize = () => {
@@ -59,6 +58,7 @@ export const Navbar = () => {
   };
 
   return (
+    // 👇 FIXED: Always Sticky, removed the conditional 'relative' class
     <nav className="sticky top-0 z-[100] bg-black/85 backdrop-blur-md border-b border-white/10 text-white transition-all duration-300 shadow-2xl">
       {/* 1. TOP BAR */}
       <div className="container mx-auto flex items-center justify-between py-4 px-6 relative">
