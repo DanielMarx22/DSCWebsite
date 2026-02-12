@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import {
   ShoppingCartIcon,
   Bars3Icon,
@@ -15,12 +15,13 @@ import { Button } from "./ui/button";
 
 export const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState<boolean>(false);
-  // 👇 NEW: State to toggle the mobile search bar
   const [mobileSearchOpen, setMobileSearchOpen] = useState<boolean>(false);
 
   const { items } = useCartStore();
   const cartCount = items.reduce((acc, item) => acc + item.quantity, 0);
   const router = useRouter();
+
+  const pathname = usePathname();
   const [searchQuery, setSearchQuery] = useState("");
 
   const mainMenuItems = [
@@ -32,11 +33,15 @@ export const Navbar = () => {
     { name: "Aquariums", href: "/products/aquariums" },
   ];
 
+  if (pathname && pathname.startsWith("/studio")) {
+    return null;
+  }
+
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth >= 768) {
         setMobileOpen(false);
-        setMobileSearchOpen(false); // Close mobile search on resize too
+        setMobileSearchOpen(false);
       }
     };
     window.addEventListener("resize", handleResize);
@@ -47,7 +52,6 @@ export const Navbar = () => {
     e.preventDefault();
     if (!searchQuery.trim()) return;
 
-    // Close mobile menus on search
     setMobileOpen(false);
     setMobileSearchOpen(false);
 
@@ -65,7 +69,7 @@ export const Navbar = () => {
             className="md:hidden text-white hover:bg-white/10 p-2"
             onClick={() => {
               setMobileOpen((prev) => !prev);
-              setMobileSearchOpen(false); // Close search if opening menu
+              setMobileSearchOpen(false);
             }}
             aria-label="Toggle Menu"
           >
@@ -131,16 +135,15 @@ export const Navbar = () => {
             <MagnifyingGlassIcon className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500 pointer-events-none group-focus-within:text-blue-500" />
           </form>
 
-          {/* MOBILE SEARCH ICON (UPDATED: No more prompt!) */}
+          {/* MOBILE SEARCH ICON */}
           <Button
             variant="ghost"
             className="md:hidden text-white hover:bg-white/10 p-2"
             onClick={() => {
               setMobileSearchOpen((prev) => !prev);
-              setMobileOpen(false); // Close menu if opening search
+              setMobileOpen(false);
             }}
           >
-            {/* Toggle icon based on state if you want, or keep glass */}
             {mobileSearchOpen ? (
               <XMarkIcon className="h-6 w-6" />
             ) : (
@@ -179,7 +182,7 @@ export const Navbar = () => {
         </div>
       </div>
 
-      {/* ✅ NEW: MOBILE SEARCH BAR (Slides down under navbar) */}
+      {/* MOBILE SEARCH BAR */}
       {mobileSearchOpen && (
         <div className="md:hidden absolute top-[100%] left-0 w-full bg-black/95 backdrop-blur-xl border-t border-b border-white/10 py-4 px-6 shadow-2xl animate-in slide-in-from-top-5 duration-200">
           <form onSubmit={handleSearch} className="relative">
