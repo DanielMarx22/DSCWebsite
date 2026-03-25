@@ -22,8 +22,12 @@ export const Navbar = () => {
   const router = useRouter();
 
   const pathname = usePathname();
-  // 👇 REMOVED: We don't need to check isStudio anymore because CSS handles the z-index
-  // const isStudio = pathname?.startsWith("/studio");
+  const isStudio = pathname?.startsWith("/studio");
+
+  // 👇 ADD THIS BACK: If we are in the studio, do not render the Navbar
+  if (isStudio) {
+    return null;
+  }
 
   const [searchQuery, setSearchQuery] = useState("");
 
