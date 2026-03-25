@@ -5,17 +5,17 @@ import { Resend } from "resend";
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function sendReceiptEmail(email: string, order: any) {
-  try {
-    // 1. Format Data
-    const total = (Number(order.totalMoney?.amount || 0) / 100).toFixed(2);
-    const date = new Date(order.createdAt).toLocaleDateString();
+    try {
+        // 1. Format Data
+        const total = (Number(order.totalMoney?.amount || 0) / 100).toFixed(2);
+        const date = new Date(order.createdAt).toLocaleDateString();
 
-    const tender = order.tenders?.[0];
-    const cardBrand = tender?.cardDetails?.card?.cardBrand || "Card";
-    const last4 = tender?.cardDetails?.card?.last4 || "****";
+        const tender = order.tenders?.[0];
+        const cardBrand = tender?.cardDetails?.card?.cardBrand || "Card";
+        const last4 = tender?.cardDetails?.card?.last4 || "****";
 
-    // 2. Build HTML (Keep your existing HTML here)
-    const emailHtml = `
+        // 2. Build HTML (Keep your existing HTML here)
+        const emailHtml = `
             <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px; color: #333;">
                 <div style="text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 20px;">
                     <h1 style="color: #111; margin: 0;">Down South Corals</h1>
@@ -66,20 +66,20 @@ export async function sendReceiptEmail(email: string, order: any) {
             </div>
         `;
 
-    // 3. Send the Email
-    const data = await resend.emails.send({
-      // 👇 THIS IS THE CRITICAL CHANGE
-      from: 'Down South Corals <receipts@downsouthcorals.com>',
-      to: [email],
-      subject: `Receipt for Order #${order.id.slice(0, 8)}`,
-      html: emailHtml,
-    });
+        const data = await resend.emails.send({
+            from: 'Down South Corals <receipts@downsouthcorals.com>',
+            to: [email],
+            // 👇 ADD THIS LINE so replies go to his real email
+            replyTo: 'Dsc.daniel01@gmail.com',
+            subject: `Receipt for Order #${order.id.slice(0, 8)}`,
+            html: emailHtml,
+        });
 
-    if (data.error) throw new Error(data.error.message);
-    return { success: true };
+        if (data.error) throw new Error(data.error.message);
+        return { success: true };
 
-  } catch (error: any) {
-    console.error("Email Error:", error);
-    return { success: false, error: error.message };
-  }
+    } catch (error: any) {
+        console.error("Email Error:", error);
+        return { success: false, error: error.message };
+    }
 }

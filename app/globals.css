@@ -147,8 +147,10 @@
 
 @layer base {
   * {
-    @apply border-border; /* This sets Color only, NOT width */
+    @apply border-border;
+    /* This sets Color only, NOT width */
   }
+
   body {
     @apply bg-background text-foreground;
   }
@@ -159,7 +161,41 @@
   from {
     transform: translateX(0);
   }
+
   to {
     transform: translateX(-50%);
   }
+}
+
+
+/* 1. Navbar Priority */
+/* Ensure Navbar always sits on top of the Studio */
+nav {
+  z-index: 100 !important;
+}
+
+/* 2. Safe Studio Wrapper */
+/* We position this box, but we let Sanity handle everything inside it */
+.studio-pinned-wrapper {
+  position: fixed;
+  /* Lock it to the screen */
+  top: var(--navbar-height);
+  /* Start below Navbar */
+  left: 0;
+  right: 0;
+  bottom: 0;
+  /* Stretch to bottom */
+  z-index: 1;
+  /* Sit below Navbar */
+  background-color: #0f172a;
+  /* Prevent white flashes */
+
+  /* CRITICAL: This allows Sanity to scroll internally without breaking window scroll */
+  overflow: hidden;
+}
+
+/* 3. Hide Footer (Cleanly) */
+body:has(.studio-pinned-wrapper) footer,
+body:has(.studio-pinned-wrapper) .footer {
+  display: none !important;
 }

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   ShoppingCartIcon,
   Bars3Icon,
@@ -19,6 +19,13 @@ export const Navbar = () => {
   const cartCount = items.reduce((acc, item) => acc + item.quantity, 0);
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
+  const pathname = usePathname();
+  const isStudio = pathname?.startsWith("/studio");
+
+  // 👇 ADD THIS BACK: If we are in the studio, do not render the Navbar
+  if (isStudio) {
+    return null;
+  }
 
   const mainMenuItems = [
     { name: "All Products", href: "/products" },
