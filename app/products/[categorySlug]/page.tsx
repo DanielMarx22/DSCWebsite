@@ -30,7 +30,7 @@ interface Product {
 
 interface PageProps {
   params: Promise<{ categorySlug: string }>;
-  searchParams: Promise<{ page?: string; showAll?: string }>;
+  searchParams: Promise<{ page?: string; showAll?: string; sub?: string }>;
 }
 
 export default async function CategoryPage({
@@ -38,7 +38,7 @@ export default async function CategoryPage({
   searchParams,
 }: PageProps) {
   const { categorySlug } = await params;
-  const { page, showAll } = await searchParams;
+  const { page, showAll, sub } = await searchParams;
 
   const showOutOfStock = showAll === "true";
   const currentPage = Number(page) || 1;
@@ -46,7 +46,8 @@ export default async function CategoryPage({
   const end = start + ITEMS_PER_PAGE;
 
   const inventoryFilter = showOutOfStock ? "" : "&& inventory > 0";
-  const queryFilter = `_type == "product" && category == $category ${inventoryFilter}`;
+  const subFilter = sub ? `&& $sub in subcategory` : "";
+  const queryFilter = `_type == "product" && category == $category ${inventoryFilter} ${subFilter}`;
 
   const productsQuery = `
     *[${queryFilter}] | order(inventory desc, _createdAt desc) [$start...$end] {
@@ -57,7 +58,8 @@ export default async function CategoryPage({
       price,
       inventory,
       category,
-      tags
+      tags,
+      subcategory
     }
   `;
 
@@ -65,7 +67,7 @@ export default async function CategoryPage({
   const salesQuery = `*[_type == "sale" && isActive == true]`;
 
   const fetchOptions = { next: { revalidate: 0 } };
-  const queryParams = { category: categorySlug, start, end };
+  const queryParams = { category: categorySlug, start, end, sub: sub || "" };
 
   const [products, totalCount, sales] = await Promise.all([
     client.fetch<Product[]>(productsQuery, queryParams, fetchOptions),
@@ -134,7 +136,7 @@ export default async function CategoryPage({
           <Pagination
             currentPage={currentPage}
             totalPages={totalPages}
-            baseUrl={`/products/${categorySlug}`}
+            baseUrl={`/products/${categorySlug}${sub ? `?sub=${sub}` : ""}`}
           />
         </div>
       </div>

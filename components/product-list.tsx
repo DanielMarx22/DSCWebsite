@@ -15,6 +15,7 @@ type Product = {
   imageUrl: string;
   category: string;
   tags?: string[];
+  subcategory?: string[];
   inventory: number;
 };
 
@@ -139,8 +140,19 @@ export function ProductList({
       aquariums: new Set(),
     };
     products.forEach((p) => {
-      if (p.tags && p.category && groups[p.category]) {
-        p.tags.forEach((tag) => groups[p.category].add(tag));
+      // Helper to capitalize first letter (or keep acronyms like SPS if desired)
+      const formatTag = (str: string) => {
+        const acronyms = ["sps", "lps", "wysiwyg"];
+        if (acronyms.includes(str.toLowerCase())) return str.toUpperCase();
+        return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+      };
+
+      const combinedTags = new Set<string>();
+      if (p.tags) p.tags.forEach((t) => combinedTags.add(formatTag(t)));
+      if (p.subcategory) p.subcategory.forEach((s) => combinedTags.add(formatTag(s)));
+
+      if (p.category && groups[p.category]) {
+        combinedTags.forEach((tag) => groups[p.category].add(tag));
       }
     });
     return {
@@ -155,7 +167,17 @@ export function ProductList({
 
   useEffect(() => {
     const allValidTags = new Set<string>();
-    products.forEach((p) => p.tags?.forEach((t) => allValidTags.add(t)));
+    const formatTag = (str: string) => {
+      const acronyms = ["sps", "lps", "wysiwyg"];
+      if (acronyms.includes(str.toLowerCase())) return str.toUpperCase();
+      return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+    };
+
+    products.forEach((p) => {
+      p.tags?.forEach((t) => allValidTags.add(formatTag(t)));
+      p.subcategory?.forEach((s) => allValidTags.add(formatTag(s)));
+    });
+
     setSelectedTags((prev) => prev.filter((tag) => allValidTags.has(tag)));
   }, [products]);
 
@@ -167,9 +189,19 @@ export function ProductList({
   const filteredProducts = useMemo(() => {
     let result = [...products];
     if (selectedTags.length > 0) {
-      result = result.filter((product) =>
-        selectedTags.some((tag) => product.tags?.includes(tag))
-      );
+      result = result.filter((product) => {
+        const formatTag = (str: string) => {
+          const acronyms = ["sps", "lps", "wysiwyg"];
+          if (acronyms.includes(str.toLowerCase())) return str.toUpperCase();
+          return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+        };
+
+        const combined = new Set<string>();
+        product.tags?.forEach(t => combined.add(formatTag(t)));
+        product.subcategory?.forEach(s => combined.add(formatTag(s)));
+
+        return selectedTags.some((tag) => combined.has(tag));
+      });
     }
     if (priceRange.min)
       result = result.filter((p) => (p.price || 0) >= Number(priceRange.min));

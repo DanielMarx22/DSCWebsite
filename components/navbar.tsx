@@ -33,7 +33,18 @@ export const Navbar = () => {
 
   const mainMenuItems = [
     { name: "All Products", href: "/products" },
-    { name: "Corals", href: "/products/corals" },
+    { 
+      name: "Corals", 
+      href: "/products/corals",
+      subItems: [
+        { name: "All Corals", href: "/products/corals" },
+        { name: "WYSIWYG", href: "/products/corals?sub=wysiwyg" },
+        { name: "SPS", href: "/products/corals?sub=sps" },
+        { name: "LPS", href: "/products/corals?sub=lps" },
+        { name: "Softies", href: "/products/corals?sub=softies" },
+        { name: "Beginner", href: "/products/corals?sub=beginner" },
+      ]
+    },
     { name: "Saltwater Fish", href: "/products/saltwater-fish" },
     { name: "Freshwater", href: "/products/freshwater" },
     { name: "Inverts", href: "/products/inverts" },
@@ -175,14 +186,31 @@ export const Navbar = () => {
       <div className="hidden md:block border-t border-white/5 bg-black/40">
         <div className="container mx-auto flex justify-center space-x-12 py-3">
           {mainMenuItems.map((item) => (
-            <Link
-              key={item.name}
-              href={item.href}
-              className="relative text-lg font-medium text-gray-300 hover:text-white transition-colors group"
-            >
-              {item.name}
-              <span className="absolute -bottom-2 left-0 w-0 h-[2px] bg-blue-500 transition-all duration-300 group-hover:w-full"></span>
-            </Link>
+            <div key={item.name} className="relative group">
+              <Link
+                href={item.href}
+                className="relative text-lg font-medium text-gray-300 hover:text-white transition-colors block py-2"
+              >
+                {item.name}
+                <span className="absolute bottom-0 left-0 w-0 h-[2px] bg-blue-500 transition-all duration-300 group-hover:w-full"></span>
+              </Link>
+              
+              {item.subItems && (
+                <div className="absolute left-1/2 -translate-x-1/2 top-[100%] opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-300 z-50">
+                  <div className="bg-black/95 backdrop-blur-xl border border-gray-800 rounded-xl shadow-2xl overflow-hidden min-w-[180px] flex flex-col py-2 mt-2">
+                    {item.subItems.map((subItem) => (
+                      <Link
+                        key={subItem.name}
+                        href={subItem.href}
+                        className="px-6 py-3 text-gray-300 hover:text-white hover:bg-white/10 transition-colors whitespace-nowrap text-base font-medium"
+                      >
+                        {subItem.name}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           ))}
         </div>
       </div>
@@ -222,6 +250,21 @@ export const Navbar = () => {
                 >
                   {item.name}
                 </Link>
+                {item.subItems && (
+                  <ul className="flex flex-col pl-4 mt-2 space-y-1 border-l-2 border-gray-800 ml-4">
+                    {item.subItems.map(subItem => (
+                      <li key={subItem.name}>
+                        <Link
+                          href={subItem.href}
+                          className="block text-gray-400 hover:text-white p-3 rounded-lg transition-colors text-lg font-medium hover:bg-white/5"
+                          onClick={() => setMobileOpen(false)}
+                        >
+                          {subItem.name}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </li>
             ))}
           </ul>

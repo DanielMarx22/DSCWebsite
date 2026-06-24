@@ -54,6 +54,22 @@ export default defineType({
       },
     }),
     defineField({
+      name: "subcategory",
+      title: "Subcategory",
+      type: "array",
+      of: [{ type: "string" }],
+      hidden: ({ document }) => document?.category !== "corals",
+      options: {
+        list: [
+          { title: "WYSIWYG", value: "wysiwyg" },
+          { title: "SPS", value: "sps" },
+          { title: "LPS", value: "lps" },
+          { title: "Softies", value: "softies" },
+          { title: "Beginner", value: "beginner" },
+        ],
+      },
+    }),
+    defineField({
       name: "tags",
       title: "Tags",
       type: "array",
