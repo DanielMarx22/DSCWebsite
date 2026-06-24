@@ -9,7 +9,8 @@ const ITEMS_PER_PAGE = 30;
 
 // 🖼️ HEADER IMAGE MAPPING
 const headerImages: Record<string, string> = {
-  fish: "/images/backgrounds/fishbackground.webp",
+  "saltwater-fish": "/images/backgrounds/fishbackground.webp",
+  freshwater: "/images/freshwater/betta.jpg",
   corals: "/images/backgrounds/coralbackground.webp",
   inverts: "/images/backgrounds/invertbackground.webp",
   supplies: "/images/backgrounds/radionxr30background.webp",
@@ -102,7 +103,7 @@ export default async function CategoryPage({
           {/* Centered Title */}
           <div className="absolute inset-0 flex items-center justify-center">
             <h1 className="relative z-10 text-[8vw] md:text-7xl font-black capitalize text-white drop-shadow-2xl tracking-tighter leading-none text-center">
-              {categorySlug}{" "}
+              {categorySlug.replace(/-/g, " ")}{" "}
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-600">
                 Collection
               </span>
@@ -113,6 +114,15 @@ export default async function CategoryPage({
 
       {/* 📦 CONTENT WRAPPER */}
       <div className="w-full">
+        {categorySlug === "supplies" && (
+          <div className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+            <div className="bg-yellow-900/30 border border-yellow-500/50 rounded-lg p-4 text-center shadow-lg">
+              <p className="text-yellow-100 font-medium text-lg">
+                Note: Some dry goods are dropship only and not typically available for store pickup.
+              </p>
+            </div>
+          </div>
+        )}
         <ProductList
           products={products}
           sales={sales}

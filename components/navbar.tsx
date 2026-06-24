@@ -30,18 +30,12 @@ export const Navbar = () => {
   }
 
   const [searchQuery, setSearchQuery] = useState("");
-  const pathname = usePathname();
-  const isStudio = pathname?.startsWith("/studio");
-
-  // 👇 ADD THIS BACK: If we are in the studio, do not render the Navbar
-  if (isStudio) {
-    return null;
-  }
 
   const mainMenuItems = [
     { name: "All Products", href: "/products" },
     { name: "Corals", href: "/products/corals" },
-    { name: "Fish", href: "/products/fish" },
+    { name: "Saltwater Fish", href: "/products/saltwater-fish" },
+    { name: "Freshwater", href: "/products/freshwater" },
     { name: "Inverts", href: "/products/inverts" },
     { name: "Supplies", href: "/products/supplies" },
     { name: "Aquariums", href: "/products/aquariums" },

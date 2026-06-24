@@ -22,7 +22,8 @@ function getDailyIndex(max: number) {
 
 // 🖼️ IMAGE CONFIGURATION
 const categoryImages: Record<string, string> = {
-  Fish: "/images/backgrounds/fishbackground.webp",
+  "Saltwater Fish": "/images/backgrounds/fishbackground.webp",
+  "Freshwater": "/images/freshwater/betta.jpg",
   Corals: "/images/backgrounds/coralbackground.webp",
   Inverts: "/images/backgrounds/invertbackground.webp",
   Supplies: "/images/backgrounds/suppliesbackground.webp",
@@ -292,14 +293,14 @@ export default async function Home() {
 
         {/* Changed grid to flex + overflow for scrolling */}
         <div className="flex overflow-x-auto gap-4 pb-8 snap-x snap-mandatory scrollbar-hide">
-          {["Fish", "Corals", "Inverts", "Supplies", "Aquariums"].map((cat) => {
+          {["Saltwater Fish", "Freshwater", "Corals", "Inverts", "Supplies", "Aquariums"].map((cat) => {
             const objectFitClass =
               cat === "Supplies" ? "object-contain" : "object-cover";
 
             return (
               <Link
                 key={cat}
-                href={`/products/${cat.toLowerCase()}`}
+                href={`/products/${cat.toLowerCase().replace(" ", "-")}`}
                 // ✨ FIX: Added min-w, aspect-square, and snap-start
                 className="group relative min-w-[200px] md:min-w-[250px] aspect-square bg-black rounded-xl overflow-hidden flex items-center justify-center border border-gray-700 hover:border-blue-500 transition-all shadow-lg hover:shadow-blue-900/20 snap-start"
               >

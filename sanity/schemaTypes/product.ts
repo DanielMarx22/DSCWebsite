@@ -44,7 +44,8 @@ export default defineType({
       type: "string",
       options: {
         list: [
-          { title: "Fish", value: "fish" },
+          { title: "Saltwater Fish", value: "saltwater-fish" },
+          { title: "Freshwater", value: "freshwater" },
           { title: "Corals", value: "corals" },
           { title: "Inverts", value: "inverts" },
           { title: "Supplies", value: "supplies" },

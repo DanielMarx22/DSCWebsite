@@ -55,8 +55,13 @@ export const Footer = async () => {
               </Link>
             </li>
             <li>
-              <Link href="/products/fish" className="hover:text-white">
-                Fish
+              <Link href="/products/saltwater-fish" className="hover:text-white">
+                Saltwater Fish
+              </Link>
+            </li>
+            <li>
+              <Link href="/products/freshwater" className="hover:text-white">
+                Freshwater
               </Link>
             </li>
             <li>

@@ -131,7 +131,8 @@ export function ProductList({
 
   const tagGroups = useMemo(() => {
     const groups: Record<string, Set<string>> = {
-      fish: new Set(),
+      "saltwater-fish": new Set(),
+      freshwater: new Set(),
       corals: new Set(),
       inverts: new Set(),
       supplies: new Set(),
@@ -143,7 +144,8 @@ export function ProductList({
       }
     });
     return {
-      fish: Array.from(groups.fish).sort(),
+      "saltwater-fish": Array.from(groups["saltwater-fish"]).sort(),
+      freshwater: Array.from(groups.freshwater).sort(),
       corals: Array.from(groups.corals).sort(),
       inverts: Array.from(groups.inverts).sort(),
       supplies: Array.from(groups.supplies).sort(),
@@ -283,10 +285,18 @@ export function ProductList({
           </div>
 
           {/* TAGS */}
-          {activeCategories.has("fish") && tagGroups.fish.length > 0 && (
+          {activeCategories.has("saltwater-fish") && tagGroups["saltwater-fish"].length > 0 && (
             <FilterSection
-              title="Fish Type"
-              options={tagGroups.fish}
+              title="Saltwater Fish Type"
+              options={tagGroups["saltwater-fish"]}
+              selected={selectedTags}
+              onToggle={toggleTag}
+            />
+          )}
+          {activeCategories.has("freshwater") && tagGroups.freshwater.length > 0 && (
+            <FilterSection
+              title="Freshwater Type"
+              options={tagGroups.freshwater}
               selected={selectedTags}
               onToggle={toggleTag}
             />
