@@ -8,9 +8,9 @@ import { calculateSalePrice, Sale } from "@/lib/sale-utils";
 
 // ✅ GLOBAL CURRENCY FORMATTER
 const formatMoney = (amount: number) => {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
   }).format(amount);
 };
 
@@ -44,7 +44,10 @@ export const Carousel = ({ products, sales }: Props) => {
   if (!products || products.length === 0) return null;
 
   const currentProduct = products[current];
-  const { salePrice, originalPrice, isOnSale } = calculateSalePrice(currentProduct, sales || []);
+  const { salePrice, originalPrice, isOnSale } = calculateSalePrice(
+    currentProduct,
+    sales || []
+  );
 
   return (
     <Link href={`/products/${currentProduct.category}/${currentProduct.slug}`}>
@@ -66,7 +69,7 @@ export const Carousel = ({ products, sales }: Props) => {
           </div>
         )}
 
-        <CardContent className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+        <CardContent className="absolute bottom-0 left-0 right-0 pt-12 pb-6 px-6 flex flex-col items-center justify-end bg-gradient-to-t from-black via-black/80 to-transparent z-10">
           <CardTitle className="text-3xl font-bold text-white mb-2 text-center">
             {currentProduct.name}
           </CardTitle>

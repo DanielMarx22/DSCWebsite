@@ -5,11 +5,12 @@ export interface CartItem {
   id: string;
   name: string;
   price: number;
+  originalPrice?: number;
   imageUrl?: string | null;
   quantity: number;
   maxQuantity: number;
   slug: string;
-  category: string; // 👈 Add this
+  category: string;
 }
 
 interface CartState {
@@ -27,14 +28,24 @@ export const useCartStore = create<CartState>()(
       addItem: (item) =>
         set((state) => {
           const existingItem = state.items.find((i) => i.id === item.id);
+
           if (existingItem) {
             // Check if adding 1 would exceed limit
             if (existingItem.quantity >= existingItem.maxQuantity) {
-              return { items: [...state.items] }; // Do nothing
+              return { items: [...state.items] };
             }
+
             return {
               items: state.items.map((i) =>
-                i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i
+                i.id === item.id
+                  ? {
+                      ...i,
+                      // 👇 FIX: Update these fields too, in case they changed (like adding originalPrice)
+                      originalPrice: item.originalPrice,
+                      price: item.price,
+                      quantity: i.quantity + 1,
+                    }
+                  : i
               ),
             };
           }
@@ -49,7 +60,6 @@ export const useCartStore = create<CartState>()(
           items: state.items.map((item) => {
             if (item.id === id) {
               if (action === "increase") {
-                // 👈 ENFORCE LIMIT HERE
                 return item.quantity < item.maxQuantity
                   ? { ...item, quantity: item.quantity + 1 }
                   : item;

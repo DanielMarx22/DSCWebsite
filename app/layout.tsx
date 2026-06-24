@@ -9,25 +9,24 @@ export const metadata: Metadata = {
   description: "Rare Corals, Low Prices",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en">
-      <head>
-        {/* Any custom head tags go here */}
-      </head>
+      <head>{/* Any custom head tags go here */}</head>
       {/* 1. RESTORED: bg-neutral-900 text-white (Fixes white background) 
          2. RESTORED: flex min-h-screen (Fixes layout structure)
       */}
       <body className="flex min-h-screen flex-col bg-neutral-900 text-white">
-
         {/* 3. ADDED: This loads the payment script invisibly */}
         <SquareLoader />
 
         <Navbar />
 
-        <main className="flex-grow container mx-auto px-4 py-8">
-          {children}
-        </main>
+        <main className="flex-grow ">{children}</main>
 
         <Footer />
       </body>

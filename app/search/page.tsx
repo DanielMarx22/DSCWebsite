@@ -2,7 +2,7 @@ import { client } from "@/sanity/lib/client";
 import { ProductList } from "@/components/product-list";
 
 interface SearchPageProps {
-  searchParams: Promise<{ query?: string }>;
+  searchParams: Promise<{ query?: string; showAll?: string }>;
 }
 
 // Define Product Shape
@@ -18,8 +18,12 @@ interface Product {
 }
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
-  const { query } = await searchParams;
+  // Await params (Next.js 15 requirement)
+  const { query, showAll } = await searchParams;
   const searchTerm = query || "";
+
+  // 👇 CHECK THE FILTER STATUS
+  const isShowAll = showAll === "true";
 
   // 1. If no search term, return empty state
   if (!searchTerm) {
@@ -31,36 +35,47 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     );
   }
 
-  // 2. Query Sanity for matches in Title, Tags, or Category
-  // The '*' acts as a wildcard so "Tang" finds "Gem Tang"
-  const products = await client.fetch<Product[]>(`
-    *[_type == "product" && (
-      title match $term + "*" || 
-      category match $term + "*" || 
-      tags[] match $term + "*"
-    )] {
-      _id,
-      "name": title,
-      "slug": slug.current,
-      "imageUrl": images[0].asset->url,
-      price,
-      inventory,
-      category,
-      tags
+  // 2. Build the Query Condition
+  // We construct the "Filter String" based on whether showAll is active
+  const stockCondition = isShowAll ? "" : "&& inventory > 0";
+
+  const sanityQuery = `
+    {
+      "products": *[_type == "product" && (
+        title match $term + "*" || 
+        category match $term + "*" || 
+        tags[] match $term + "*"
+      ) ${stockCondition}] {   // 👈 Insert Stock Condition Here
+        _id,
+        "name": title,
+        "slug": slug.current,
+        "imageUrl": images[0].asset->url,
+        price,
+        inventory,
+        category,
+        tags
+      },
+      "totalCount": count(*[_type == "product" && (
+        title match $term + "*" || 
+        category match $term + "*" || 
+        tags[] match $term + "*"
+      ) ${stockCondition}])
     }
-  `, { term: searchTerm });
+  `;
+
+  // 3. Fetch Data
+  const { products, totalCount } = await client.fetch(sanityQuery, {
+    term: searchTerm,
+  });
 
   return (
     <div className="container mx-auto py-10 px-4">
       <h1 className="text-3xl font-bold mb-2">
         Search Results for "{searchTerm}"
       </h1>
-      <p className="text-gray-500 mb-8">
-        Found {products.length} product{products.length === 1 ? "" : "s"}
-      </p>
 
-      {/* Reuse your existing robust ProductList component */}
-      <ProductList products={products} />
+      {/* ProductList will handle the "Showing X of Y" text using totalCount */}
+      <ProductList products={products} totalCount={totalCount} />
     </div>
   );
 }
