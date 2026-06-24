@@ -167,11 +167,6 @@
   }
 }
 
-:root {
-  /* Match this to your actual Navbar height */
-  --navbar-height: 130px;
-}
-
 /* 1. Navbar Priority */
 /* Ensure Navbar always sits on top of the Studio */
 nav {
